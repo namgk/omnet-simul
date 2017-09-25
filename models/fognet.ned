@@ -19,6 +19,47 @@ import inet.mobility.group.MoBANCoordinator;
 import inet.mobility.contract.IMobility;
 import inet.node.internetcloud.InternetCloud;
 
+simple Component
+{
+    gates:
+        input in;
+        output out;
+}
+simple Source
+{
+    parameters:
+        volatile double sendIaTime @unit(s) = exponential(1s);
+        @display("i=block/source");
+    gates:
+        output out[2];
+}
+simple Sink
+{
+    parameters:
+        @display("i=block/sink");
+    gates:
+        input in;
+}
+
+
+module App
+{
+    submodules:
+        a: Source {
+            @display("p=163,6");
+        }
+        b: Component {
+            @display("p=97,78");
+        }
+        c: Sink;
+        d: Sink {
+            @display("p=193,84");
+        }
+    connections allowunconnected:
+        a.out[0] --> b.in;
+        b.out --> c.in;
+        a.out[1] --> d.in;
+}
 
 module MobileHost
 {
@@ -28,6 +69,7 @@ module MobileHost
         @display("i=device/pocketpc_s");
     submodules:
         mobility: <mobilityType> like IMobility;
+        app: App;
 }
 
 module CloudHost
@@ -37,6 +79,7 @@ module CloudHost
         @networkNode();
     submodules:
         mobility: <mobilityType> like IMobility;
+        app: App;
 }
 
 module FogHost
@@ -46,6 +89,7 @@ module FogHost
         @networkNode();
     submodules:
         mobility: <mobilityType> like IMobility;
+        app: App;
 }
 
 network FogNetwork

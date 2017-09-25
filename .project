@@ -3,6 +3,7 @@
 	<name>tutorial</name>
 	<comment></comment>
 	<projects>
+		<project>embedding</project>
 		<project>inet</project>
 	</projects>
 	<buildSpec>
