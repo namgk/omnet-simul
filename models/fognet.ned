@@ -40,7 +40,11 @@ simple Sink
     gates:
         input in;
 }
-
+simple LocalCoordinator
+{
+    parameters:
+        volatile double sendIaTime @unit(s) = exponential(1s);
+}
 
 module App
 {
@@ -56,9 +60,6 @@ module App
             @display("p=193,84");
         }
     connections allowunconnected:
-        a.out[0] --> b.in;
-        b.out --> c.in;
-        a.out[1] --> d.in;
 }
 
 module MobileHost
@@ -70,6 +71,7 @@ module MobileHost
     submodules:
         mobility: <mobilityType> like IMobility;
         app: App;
+        coordinator: LocalCoordinator;
 }
 
 module CloudHost
@@ -80,6 +82,7 @@ module CloudHost
     submodules:
         mobility: <mobilityType> like IMobility;
         app: App;
+        coordinator: LocalCoordinator;
 }
 
 module FogHost
@@ -90,6 +93,7 @@ module FogHost
     submodules:
         mobility: <mobilityType> like IMobility;
         app: App;
+        coordinator: LocalCoordinator;
 }
 
 network FogNetwork

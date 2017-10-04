@@ -1,12 +1,12 @@
 #
-# OMNeT++/OMNEST Makefile for omnet-simul
+# OMNeT++/OMNEST Makefile for tutorial
 #
 # This file was generated with the command:
-#  opp_makemake -f --deep -O out -KEMBEDDING_PROJ=/Users/namtrang/Downloads/omnetpp-5.1.1/samples/embedding -KINET_PROJ=../inet -DINET_IMPORT -I. -I$$\(INET_PROJ\)/src -L$$\(INET_PROJ\)/out/$$\(CONFIGNAME\)/src -lINET
+#  opp_makemake -f --deep -O out -KINET_PROJ=../inet -DINET_IMPORT -I. -I$$\(INET_PROJ\)/src -L$$\(INET_PROJ\)/out/$$\(CONFIGNAME\)/src -lINET
 #
 
 # Name of target to be created (-o option)
-TARGET = omnet-simul$(EXE_SUFFIX)
+TARGET = tutorial$(EXE_SUFFIX)
 
 # User interface (uncomment one) (-u option)
 USERIF_LIBS = $(ALL_ENV_LIBS) # that is, $(TKENV_LIBS) $(QTENV_LIBS) $(CMDENV_LIBS)
@@ -29,7 +29,13 @@ PROJECTRELATIVE_PATH =
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS = $O/modules/component.o $O/modules/sink.o $O/modules/source.o
+OBJS = \
+    $O/modules/app.o \
+    $O/modules/component.o \
+    $O/modules/localCoordinator.o \
+    $O/modules/mobileHost.o \
+    $O/modules/sink.o \
+    $O/modules/source.o
 
 # Message files
 MSGFILES =
@@ -38,7 +44,6 @@ MSGFILES =
 SMFILES =
 
 # Other makefile variables (-K)
-EMBEDDING_PROJ=/Users/namtrang/Downloads/omnetpp-5.1.1/samples/embedding
 INET_PROJ=../inet
 
 #------------------------------------------------------------------------------
