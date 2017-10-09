@@ -45,6 +45,11 @@ simple LocalCoordinator
     parameters:
         volatile double sendIaTime @unit(s) = exponential(1s);
 }
+simple CentralizedCoordinator
+{
+    parameters:
+        volatile double sendIaTime @unit(s) = exponential(1s);
+}
 
 module App
 {
@@ -114,5 +119,7 @@ network FogNetwork
         fogHost[numFogHosts]: FogHost {
             parameters:
                 @display("p=383,120;i=device/switch");
+        }
+        centralizedCoordinator: CentralizedCoordinator {
         }
 }
