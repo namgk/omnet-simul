@@ -1,9 +1,3 @@
 eclipse.preferences.version=1
-environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/CPATH/delimiter=\:
-environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/CPATH/operation=append
-environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/CPATH/value=/Users/namtrang/Downloads/ortoolcpp/or-tools_MacOsX-10.12.6_v6.4.4495/include
-environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/LD_LIBRARY_PATH/delimiter=\:
-environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/LD_LIBRARY_PATH/operation=append
-environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/LD_LIBRARY_PATH/value=/Users/namtrang/Downloads/ortoolcpp/or-tools_MacOsX-10.12.6_v6.4.4495/lib
 environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/append=true
 environment/project/org.omnetpp.cdt.gnu.config.debug.394849669/appendContributed=true

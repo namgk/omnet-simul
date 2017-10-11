@@ -15,7 +15,7 @@
 
 #include <string.h>
 #include <omnetpp.h>
-#include "inet/common/geometry/common/Coord.h"
+//#include "inet/common/geometry/common/Coord.h"
 #include "inet/mobility/single/MassMobility.h"
 
 using namespace omnetpp;
@@ -65,15 +65,15 @@ void LocalCoordinator::initialize()
     if (!mobility){
         return;
     }
-
-    try {
-        inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
-        inet::Coord coord = mob->getCurrentPosition();
-        std::string coordInfo = coord.info();
-        EV_INFO << " _________ " << coordInfo;
-    } catch( std::exception e ) {
+//
+//    try {
+//        inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
+//        inet::Coord coord = mob->getCurrentPosition();
+//        std::string coordInfo = coord.info();
+//        EV_INFO << " _________ " << coordInfo;
+//    } catch( std::exception e ) {
 //        EV_ERROR << msg << endl;
-    }
+//    }
 
 
 
@@ -91,7 +91,7 @@ void LocalCoordinator::handleMessage(cMessage *msg)
         inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
         inet::Coord coord = mob->getCurrentPosition();
         std::string coordInfo = coord.info();
-        EV_INFO << " _________ " << coordInfo;
+//        EV_INFO << " _________ " << coordInfo;
     } catch( std::exception e ) {
 //        EV_ERROR << msg << endl;
     }

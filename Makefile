@@ -1,12 +1,12 @@
 #
-# OMNeT++/OMNEST Makefile for omnet-simul
+# OMNeT++/OMNEST Makefile for tutorial
 #
 # This file was generated with the command:
-#  opp_makemake -f --deep -O out -KEMBEDDING_PROJ=/Users/namtrang/Downloads/omnetpp-5.1.1/samples/embedding -KINET_PROJ=../inet -DINET_IMPORT -I. -I/Users/namtrang/Downloads/ortoolcpp/or-tools_MacOsX-10.12.6_v6.4.4495/include -I$$\(INET_PROJ\)/src -L$$\(INET_PROJ\)/out/$$\(CONFIGNAME\)/src -lINET
+#  opp_makemake -f --deep -O out -KINET_PROJ=../inet -DINET_IMPORT -I. -Iortools/include -I$$\(INET_PROJ\)/src -L$$\(INET_PROJ\)/out/$$\(CONFIGNAME\)/src -lINET -Xortools -- ./ortools/lib/*.dylib
 #
 
 # Name of target to be created (-o option)
-TARGET = omnet-simul$(EXE_SUFFIX)
+TARGET = tutorial$(EXE_SUFFIX)
 
 # User interface (uncomment one) (-u option)
 USERIF_LIBS = $(ALL_ENV_LIBS) # that is, $(TKENV_LIBS) $(QTENV_LIBS) $(CMDENV_LIBS)
@@ -15,10 +15,10 @@ USERIF_LIBS = $(ALL_ENV_LIBS) # that is, $(TKENV_LIBS) $(QTENV_LIBS) $(CMDENV_LI
 #USERIF_LIBS = $(QTENV_LIBS)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I. -I/Users/namtrang/Downloads/ortoolcpp/or-tools_MacOsX-10.12.6_v6.4.4495/include -I$(INET_PROJ)/src
+INCLUDE_PATH = -I. -Iortools/include -I$(INET_PROJ)/src
 
 # Additional object and library files to link with
-EXTRA_OBJS =
+EXTRA_OBJS = ./ortools/lib/*.dylib
 
 # Additional libraries (-L, -l options)
 LIBS = $(LDFLAG_LIBPATH)$(INET_PROJ)/out/$(CONFIGNAME)/src  -lINET
@@ -30,7 +30,7 @@ O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
 OBJS = \
-    $O/m/app.o \
+    $O/modules/app.o \
     $O/modules/centralizedCoordinator.o \
     $O/modules/component.o \
     $O/modules/localCoordinator.o \
@@ -45,7 +45,6 @@ MSGFILES =
 SMFILES =
 
 # Other makefile variables (-K)
-EMBEDDING_PROJ=/Users/namtrang/Downloads/omnetpp-5.1.1/samples/embedding
 INET_PROJ=../inet
 
 #------------------------------------------------------------------------------
@@ -89,6 +88,9 @@ endif
 #------------------------------------------------------------------------------
 # User-supplied makefile fragment(s)
 # >>>
+# inserted from file 'makefrag':
+CFLAGS="-DUSE_GLOP"
+
 # <<<
 #------------------------------------------------------------------------------
 

@@ -3,9 +3,7 @@
 	<name>tutorial</name>
 	<comment></comment>
 	<projects>
-		<project>embedding</project>
 		<project>inet</project>
-		<project>or-tools_MacOsX-10.12.6_v6.4.4495</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
@@ -38,4 +36,6 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 		<nature>org.omnetpp.main.omnetppnature</nature>
 	</natures>
+	<linkedResources>
+	</linkedResources>
 </projectDescription>

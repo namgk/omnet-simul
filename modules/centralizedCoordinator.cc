@@ -19,26 +19,50 @@
 #include "inet/mobility/single/MassMobility.h"
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/linear_solver/linear_solver.pb.h"
+#include "ortools/constraint_solver/constraint_solveri.h"
 
 using namespace omnetpp;
 
 class CentralizedCoordinator : public cSimpleModule
 {
     const char *name;
+    cModule *parent;
+
     private:
         cMessage *sendMessageEvent;
     public:
+        double numberOfMobileHost;
         CentralizedCoordinator();
         virtual ~CentralizedCoordinator();
     protected:
         // The following redefined virtual function holds the algorithm.
         virtual void initialize() override;
         virtual void handleMessage(cMessage *msg) override;
-        virtual void RunTest(operations_research::MPSolver::OptimizationProblemType optimization_problem_type);
+        void RunTest();
 //        virtual void RunExample();
 };
 
 Define_Module(CentralizedCoordinator);
+
+namespace operations_research {
+
+void CPSimple(CentralizedCoordinator *coordinator) {
+    Solver solver("CPSimple");
+    const int64 numVals = coordinator->numberOfMobileHost;// 5 mobile hosts
+
+    IntVar* const x = solver.MakeIntVar(0, numVals - 1, "x");
+    IntVar* const y = solver.MakeIntVar(0, numVals - 1, "y");
+    IntVar* const z = solver.MakeIntVar(0, numVals - 1, "z");
+    IntVar* const w = solver.MakeIntVar(0, numVals - 1, "w");
+
+    IntVar* const p = solver.MakeIntVar(0, 20, "pheasant");
+    IntVar* const r = solver.MakeIntVar(0, 20, "rabbit");
+    IntExpr* const region = solver.MakeProd(p, 2);
+    IntExpr* const heads = solver.MakeSum(p, r);
+//    Constraint* const ct_legs = solver.MakeEquality(legs, 56);
+}
+
+}   // namespace operations_research
 
 CentralizedCoordinator::CentralizedCoordinator()
 {
@@ -53,16 +77,23 @@ CentralizedCoordinator::~CentralizedCoordinator()
 void CentralizedCoordinator::initialize()
 {
     name = getName();//coordinator
-//    EV_INFO << " >>>> " << name;
+    EV_INFO << " >>>> " << name;
+
+    parent = getParentModule(); // whole network
+    if (!parent){
+        return;
+    }
+
+    numberOfMobileHost = parent->par("numHosts").doubleValue();
 
     RunTest();
+    operations_research::CPSimple(this);
 
     sendMessageEvent = new cMessage("sendMessageEvent");
     scheduleAt(simTime(), sendMessageEvent);
 }
 
-void CentralizedCoordinator::RunTest(
-    operations_research::MPSolver::OptimizationProblemType optimization_problem_type) {
+void CentralizedCoordinator::RunTest() {
     operations_research::MPSolver solver("Glop", operations_research::MPSolver::GLOP_LINEAR_PROGRAMMING);
     operations_research::MPVariable* const x = solver.MakeNumVar(0.0, 1, "x");
     operations_research::MPVariable* const y = solver.MakeNumVar(0.0, 2, "y");
@@ -72,20 +103,32 @@ void CentralizedCoordinator::RunTest(
     objective->SetMaximization();
     solver.Solve();
 
-    EV_INFO << " Solution ";
-    EV_INFO << " Solution " << x->solution_value();
-
 //    printf("\nx = %.1f", x->solution_value());
 //    printf("\ny = %.1f", y->solution_value());
-  }
-//
-//void CentralizedCoordinator::RunExample() {
-//    RunTest();
-//}
+}
 
 void CentralizedCoordinator::handleMessage(cMessage *msg)
 {
-    scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
+    for (cModule::SubmoduleIterator it(parent); !it.end(); it++)
+    {
+      cModule *submodule = *it;
+      const char hostName[] = "mobileHost";
+      const char *subName = submodule->getName();
+      if (strcmp (hostName,subName) == 0){
+          EV << subName << endl;
+          cModule *mobility = submodule->getSubmodule("mobility");
+          if (!mobility){
+              return;
+          }
+
+          inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
+          try {
+              inet::Coord coord = mob->getCurrentPosition();
+              std::string coordInfo = coord.info();
+              EV_INFO << " _________ " << coordInfo;
+          } catch( std::exception e ) {
+          }
+      }
+    }
+    scheduleAt(simTime()+par("coordinationPeriod").doubleValue(), sendMessageEvent);
 }
-
-

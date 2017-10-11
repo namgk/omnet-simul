@@ -48,7 +48,7 @@ simple LocalCoordinator
 simple CentralizedCoordinator
 {
     parameters:
-        volatile double sendIaTime @unit(s) = exponential(1s);
+        volatile double coordinationPeriod @unit(s) = exponential(2s);
 }
 
 module App
@@ -70,7 +70,7 @@ module App
 module MobileHost
 {
     parameters:
-        string mobilityType = default("StationaryMobility");
+        string mobilityType = default("MassMobility");
         @networkNode();
         @display("i=device/pocketpc_s");
     submodules:
@@ -108,7 +108,7 @@ network FogNetwork
         int numFogHosts;
         int numCloudHosts;
     submodules:
-        host[numHosts]: MobileHost {
+        mobileHost[numHosts]: MobileHost {
             parameters:
                 @display("p=353,273;r=,,#707070");
         }
