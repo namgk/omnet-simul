@@ -22,12 +22,15 @@
 #include "ortools/linear_solver/linear_solver.pb.h"
 #include "ortools/constraint_solver/constraint_solveri.h"
 
+#include "ContextSync.h"
+
 using namespace omnetpp;
 
 class CentralizedCoordinator : public cSimpleModule
 {
     const char *name;
     cModule *parent;
+    cArray *participant;
 
     private:
         cMessage *sendMessageEvent;
@@ -96,6 +99,8 @@ void CentralizedCoordinator::initialize()
     RunTest();
     operations_research::CPSimple(this);
 
+    participant = new cArray("participant", 100, 10);
+
     sendMessageEvent = new cMessage("sendMessageEvent");
     scheduleAt(simTime(), sendMessageEvent);
 }
@@ -116,84 +121,128 @@ void CentralizedCoordinator::RunTest() {
 
 void CentralizedCoordinator::handleMessage(cMessage *msg)
 {
+    if (msg->hasObject("ctx")){
+        cObject *payload = msg->getObject("ctx");
+        ContextSync *ctx = check_and_cast<ContextSync *>(payload);
+        const char *device = ctx->getDevice();
+        double x = ctx->getX();
+        double y = ctx->getY();
+        ctx->setName(device);
+        participant->set(ctx);
+
+//        printf("%s, %lf, %lf\n", device, x, y);
+//        delete msg;
+        return;
+    }
+
+    scheduleAt(simTime()+par("coordinationPeriod").doubleValue(), sendMessageEvent);
+
+    if (participant->size() != numberOfMobileHost){
+        return;
+    }
+
     operations_research::Solver solver("CPSimple");
 
-    // for all locations[x] of hosts that can run 'a'
+    std::vector<ContextSync*> a_hosts = {};
     std::vector<int64> a_hosts_x = {};
     std::vector<int64> a_hosts_y = {};
+    std::vector<ContextSync*> b_hosts = {};
     std::vector<int64> b_hosts_x = {};
     std::vector<int64> b_hosts_y = {};
+
+    for (int i = 0; i < participant->size(); i++) {
+      ContextSync *obj = (ContextSync *) participant->get(i);
+      a_hosts_x.push_back(static_cast<int64>(obj->getX()));
+      a_hosts_y.push_back(static_cast<int64>(obj->getY()));
+      a_hosts.push_back(obj);
+    }
+
 
     for (cModule::SubmoduleIterator it(parent); !it.end(); it++)
     {
       cModule *submodule = *it;
       const char hostName[] = "mobileHost";
       const char *subName = submodule->getName();
-      if (strcmp (hostName,subName) == 0){
-          // mobile
-          EV << subName << endl;
-          cModule *mobility = submodule->getSubmodule("mobility");
-          if (!mobility){
-              continue;
-          }
-
-          try {
-              inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
-              inet::Coord coord = mob->getCurrentPosition();
-              std::string coordInfo = coord.info();
-              a_hosts_x.push_back(static_cast<int64>(coord.x));
-              a_hosts_y.push_back(static_cast<int64>(coord.y));
-//              EV_INFO << " _________MOBILE " << coordInfo;
-          } catch( std::exception e ) {
-          }
-      } else {
-          // immobile
+      if (strcmp (hostName,subName) != 0){
+          // immobile, fog, cloud
           cModule *mobility = submodule->getSubmodule("mobility");
           try {
               inet::StationaryMobility *mob = check_and_cast<inet::StationaryMobility *>(mobility);
               inet::Coord coord = mob->getCurrentPosition();
               std::string coordInfo = coord.info();
-//              EV_INFO << " _________IMMOBILE " << coordInfo;
 
               b_hosts_x.push_back(static_cast<int64>(coord.x));
               b_hosts_y.push_back(static_cast<int64>(coord.y));
+              ContextSync *bCtx = new ContextSync();
+              bCtx->setDevice(submodule->getFullName());
+              b_hosts.push_back(bCtx);
           } catch( std::exception e ) {
           }
       }
     }
 
-    const int64 aHosts = a_hosts_x.size();
-    const int64 bHosts = b_hosts_x.size();
-    operations_research::IntVar* const a = solver.MakeIntVar(0, aHosts - 1);
-    operations_research::IntVar* const b = solver.MakeIntVar(0, bHosts - 1);
+    operations_research::IntVar* const a = solver.MakeIntVar(0, a_hosts_x.size() - 1);
+    operations_research::IntVar* const b = solver.MakeIntVar(0, b_hosts_x.size() - 1);
 
     std::vector<operations_research::IntVar*> allvars = {};
     allvars.push_back(a);
     allvars.push_back(b);
 
-    // turn a into x: function of a_instance
-    // x_a = a_hosts_x[a_instance]
+    // turn a into x: function of a
+    // x_a = a_hosts_x[a]
     operations_research::IntExpr* const x_a = solver.MakeElement(a_hosts_x, a);
     operations_research::IntExpr* const x_b = solver.MakeElement(b_hosts_x, b);
 
     operations_research::IntExpr* a_b_x_abs_difference = solver.MakeAbs(solver.MakeDifference(x_a, x_b));
-    operations_research::Constraint* nearby = solver.MakeLessOrEqual(a_b_x_abs_difference, 100);
+    operations_research::Constraint* nearby = solver.MakeLessOrEqual(a_b_x_abs_difference, 30);
 
     solver.AddConstraint(nearby);
     operations_research::DecisionBuilder* const db = solver.MakePhase(allvars,
             operations_research::Solver::CHOOSE_FIRST_UNBOUND,
             operations_research::Solver::ASSIGN_MIN_VALUE);
 
-    solver.Solve(db);
-    int count = 0;
+    operations_research::SolutionCollector *collector = solver.MakeAllSolutionCollector();
+    collector->Add(a);
+    collector->Add(b);
 
-    while (solver.NextSolution()) {
-        count++;
+    if (solver.Solve(db, solver.MakeTimeLimit(500), collector)){
+        int numOfSolutions = collector->solution_count();
+        printf("\nNumber of solutions: %d", numOfSolutions);
+
+        std::map<std::string, int> dupCheck;
+        std::vector<std::array<std::string, 2>> coordinationResults = {};
+
+        for (int i = 0; i < numOfSolutions; i++){
+
+            std::array<std::string, 2> result;
+
+            const char *aAssignment = a_hosts.at(collector->Value(i, a))->getDevice();
+            const char *bAssignment = b_hosts.at(collector->Value(i, b))->getDevice();
+            printf("\na,b: %s %s\n", aAssignment,  bAssignment);
+
+            std::string aStr(aAssignment);
+            std::string bStr(bAssignment);
+
+            if (dupCheck.find(aStr) == dupCheck.end() &&
+                    dupCheck.find(bStr) == dupCheck.end()){
+                dupCheck.insert(std::pair<std::string, int>(aStr, 1));
+                dupCheck.insert(std::pair<std::string, int>(bStr, 1));
+                result = {aStr, bStr};
+                coordinationResults.push_back(result);
+            } else {
+                continue;
+            }
+        }
+        std::cout << "\nNumber of coordination solutions: " << coordinationResults.size();
     }
+    return;
 
-    printf("\nNumber of solutions:%d", count);
-
-    scheduleAt(simTime()+par("coordinationPeriod").doubleValue(), sendMessageEvent);
+    try {
+        ContextSync *aCtx = a_hosts.at(a->Value());
+        printf("\n Test:%s", aCtx->getDevice());
+    } catch (std::exception e){
+        printf("%s\n", e.what());
+    }
 }
 
 

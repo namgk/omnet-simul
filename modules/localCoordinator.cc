@@ -15,6 +15,8 @@
 
 #include <string.h>
 #include <omnetpp.h>
+#include "ContextSync.h"
+
 //#include "inet/common/geometry/common/Coord.h"
 #include "inet/mobility/single/MassMobility.h"
 
@@ -85,15 +87,31 @@ void LocalCoordinator::initialize()
     scheduleAt(simTime(), sendMessageEvent);
 }
 
-void LocalCoordinator::handleMessage(cMessage *msg)
+void LocalCoordinator::handleMessage(cMessage *msgx)
 {
+    scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
+    inet::Coord coord;
+
     try {
         inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
-        inet::Coord coord = mob->getCurrentPosition();
-        std::string coordInfo = coord.info();
-//        EV_INFO << " _________ " << coordInfo;
+        coord = mob->getCurrentPosition();
     } catch( std::exception e ) {
-//        EV_ERROR << msg << endl;
+        return;
     }
-    scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
+
+    std::string coordInfo = coord.info();
+    double x = coord.x;
+    double y = coord.y;
+
+    cMessage *msg = new cMessage();
+    ContextSync *payload = new ContextSync();
+    payload->setDevice(device);
+    payload->setX(x);
+    payload->setY(y);
+
+    msg->addObject(payload);
+
+    send(msg, "sync");
+
+//        EV_INFO << " _________ " << coordInfo;
 }

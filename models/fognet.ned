@@ -19,6 +19,18 @@ import inet.mobility.group.MoBANCoordinator;
 import inet.mobility.contract.IMobility;
 import inet.node.internetcloud.InternetCloud;
 
+module CoordinatedHost
+{
+    gates:
+        input action;
+        output sync;
+	submodules:
+	    app: App;
+        coordinator: LocalCoordinator;
+    connections:
+		action --> {delay= 0ms;} --> coordinator.action;               
+		coordinator.sync --> {delay= 0ms;} --> sync;        
+}
 simple Component
 {
     gates:
@@ -44,11 +56,17 @@ simple LocalCoordinator
 {
     parameters:
         volatile double sendIaTime @unit(s) = exponential(1s);
+    gates:
+        input action;
+        output sync;
 }
 simple CentralizedCoordinator
 {
     parameters:
         volatile double coordinationPeriod @unit(s) = exponential(2s);
+    gates:
+        input sync[];
+        output action[];
 }
 
 module App
@@ -67,7 +85,7 @@ module App
     connections allowunconnected:
 }
 
-module MobileHost
+module MobileHost extends CoordinatedHost
 {
     parameters:
         string mobilityType = default("MassMobility");
@@ -75,30 +93,24 @@ module MobileHost
         @display("i=device/pocketpc_s");
     submodules:
         mobility: <mobilityType> like IMobility;
-        app: App;
-        coordinator: LocalCoordinator;
 }
 
-module CloudHost
+module CloudHost extends CoordinatedHost
 {
     parameters:
         string mobilityType = default("StationaryMobility");
         @networkNode();
     submodules:
         mobility: <mobilityType> like IMobility;
-        app: App;
-        coordinator: LocalCoordinator;
 }
 
-module FogHost
+module FogHost extends CoordinatedHost
 {
     parameters:
         string mobilityType = default("StationaryMobility");
         @networkNode();
     submodules:
         mobility: <mobilityType> like IMobility;
-        app: App;
-        coordinator: LocalCoordinator;
 }
 
 network FogNetwork
@@ -107,6 +119,10 @@ network FogNetwork
         int numHosts;
         int numFogHosts;
         int numCloudHosts;
+    types:
+        channel Channel extends ned.DelayChannel {
+            delay = 10ms;
+        }
     submodules:
         mobileHost[numHosts]: MobileHost {
             parameters:
@@ -120,6 +136,24 @@ network FogNetwork
             parameters:
                 @display("p=383,120;i=device/switch");
         }
-        centralizedCoordinator: CentralizedCoordinator {
+        centralizedCoordinator: CentralizedCoordinator;
+    connections:
+        for i=0..numHosts-1 {
+            mobileHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+        }
+        for i=0..numHosts-1 {
+            centralizedCoordinator.action++ --> Channel --> mobileHost[i].action;
+        }
+        for i=0..numFogHosts-1 {
+            fogHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+        }
+        for i=0..numFogHosts-1 {
+            centralizedCoordinator.action++ --> Channel --> fogHost[i].action;
+        }
+        for i=0..numCloudHosts-1 {
+            cloudHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+        }
+        for i=0..numCloudHosts-1 {
+            centralizedCoordinator.action++ --> Channel --> cloudHost[i].action;
         }
 }

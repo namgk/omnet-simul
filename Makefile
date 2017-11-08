@@ -33,6 +33,7 @@ OBJS = \
     $O/modules/app.o \
     $O/modules/centralizedCoordinator.o \
     $O/modules/component.o \
+    $O/modules/ContextSync.o \
     $O/modules/localCoordinator.o \
     $O/modules/mobileHost.o \
     $O/modules/sink.o \
