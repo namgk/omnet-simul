@@ -42,37 +42,8 @@ class CentralizedCoordinator : public cSimpleModule
         // The following redefined virtual function holds the algorithm.
         virtual void initialize() override;
         virtual void handleMessage(cMessage *msg) override;
-        void RunTest();
 };
 
-namespace operations_research {
-
-void CPSimple(CentralizedCoordinator *coordinator) {
-    Solver solver("CPSimple");
-
-    // for all locations[x] of hosts that can run 'a'
-    std::vector<int64> a_hosts_x = {};
-    a_hosts_x.push_back(121); // host[1].x = 121
-    a_hosts_x.push_back(322); // host[3].x = 322
-    a_hosts_x.push_back(49); // host[9].x = 49
-
-    // for all locations[y] of hosts that can run 'a'
-    std::vector<int64> a_hosts_y = {};
-    a_hosts_y.push_back(31); // host[1].y = 31
-    a_hosts_y.push_back(22); // host[3].y = 22
-    a_hosts_y.push_back(249); // host[9].y = 249
-
-    const int64 numVals = a_hosts_x.size();
-    IntVar* const a = solver.MakeIntVar(0, numVals - 1);
-
-    // turn a into x: function of a_instance
-    // x_a = a_hosts_x[a_instance]
-    IntExpr* const x_a = solver.MakeElement(a_hosts_x, a);
-
-//    Constraint* const ct_legs = solver.MakeEquality(legs, 56);
-}
-
-}   // namespace operations_research
 
 CentralizedCoordinator::CentralizedCoordinator()
 {
@@ -82,6 +53,7 @@ CentralizedCoordinator::CentralizedCoordinator()
 CentralizedCoordinator::~CentralizedCoordinator()
 {
     cancelAndDelete(sendMessageEvent);
+    delete participant;
 }
 
 void CentralizedCoordinator::initialize()
@@ -96,42 +68,23 @@ void CentralizedCoordinator::initialize()
 
     numberOfMobileHost = parent->par("numHosts").doubleValue();
 
-    RunTest();
-    operations_research::CPSimple(this);
-
     participant = new cArray("participant", 100, 10);
 
     sendMessageEvent = new cMessage("sendMessageEvent");
     scheduleAt(simTime(), sendMessageEvent);
 }
 
-void CentralizedCoordinator::RunTest() {
-    operations_research::MPSolver solver("Glop", operations_research::MPSolver::GLOP_LINEAR_PROGRAMMING);
-    operations_research::MPVariable* const x = solver.MakeNumVar(0.0, 1, "x");
-    operations_research::MPVariable* const y = solver.MakeNumVar(0.0, 2, "y");
-    operations_research::MPObjective* const objective = solver.MutableObjective();
-    objective->SetCoefficient(x, 1);
-    objective->SetCoefficient(y, 1);
-    objective->SetMaximization();
-    solver.Solve();
-
-//    printf("\nx = %.1f", x->solution_value());
-//    printf("\ny = %.1f", y->solution_value());
-}
-
 void CentralizedCoordinator::handleMessage(cMessage *msg)
 {
-    if (msg->hasObject("ctx")){
+    if (msg != sendMessageEvent){
         cObject *payload = msg->getObject("ctx");
         ContextSync *ctx = check_and_cast<ContextSync *>(payload);
         const char *device = ctx->getDevice();
-        double x = ctx->getX();
-        double y = ctx->getY();
-        ctx->setName(device);
-        participant->set(ctx);
-
-//        printf("%s, %lf, %lf\n", device, x, y);
-//        delete msg;
+//        double x = ctx->getX();
+//        double y = ctx->getY();
+//        ctx->setName(device);
+        msg->setName(device);
+        participant->set(msg);
         return;
     }
 
@@ -151,10 +104,11 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     std::vector<int64> b_hosts_y = {};
 
     for (int i = 0; i < participant->size(); i++) {
-      ContextSync *obj = (ContextSync *) participant->get(i);
-      a_hosts_x.push_back(static_cast<int64>(obj->getX()));
-      a_hosts_y.push_back(static_cast<int64>(obj->getY()));
-      a_hosts.push_back(obj);
+        cMessage *savedMsg = (cMessage *) participant->get(i);
+        ContextSync *obj = check_and_cast<ContextSync *>(savedMsg->getObject("ctx"));
+        a_hosts_x.push_back(static_cast<int64>(obj->getX()));
+        a_hosts_y.push_back(static_cast<int64>(obj->getY()));
+        a_hosts.push_back(obj);
     }
 
 
@@ -234,14 +188,6 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
             }
         }
         std::cout << "\nNumber of coordination solutions: " << coordinationResults.size();
-    }
-    return;
-
-    try {
-        ContextSync *aCtx = a_hosts.at(a->Value());
-        printf("\n Test:%s", aCtx->getDevice());
-    } catch (std::exception e){
-        printf("%s\n", e.what());
     }
 }
 

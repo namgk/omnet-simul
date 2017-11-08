@@ -63,7 +63,7 @@ simple LocalCoordinator
 simple CentralizedCoordinator
 {
     parameters:
-        volatile double coordinationPeriod @unit(s) = exponential(2s);
+        volatile double coordinationPeriod @unit(s) = exponential(4s);
     gates:
         input sync[];
         output action[];
