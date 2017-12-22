@@ -23,6 +23,9 @@
 #include "ortools/constraint_solver/constraint_solveri.h"
 
 #include "ContextSync.h"
+#include "SignalListener.h"
+#include "CoordinationResult.h"
+
 
 using namespace omnetpp;
 
@@ -31,6 +34,10 @@ class CentralizedCoordinator : public cSimpleModule
     const char *name;
     cModule *parent;
     cArray *participant;
+    SignalListener *listener;
+//    simsignal_t sentSignal;
+//    simsignal_t recvSignal;
+    simsignal_t abratioSignal;
 
     private:
         cMessage *sendMessageEvent;
@@ -70,6 +77,15 @@ void CentralizedCoordinator::initialize()
 
     participant = new cArray("participant", 100, 10);
 
+    listener = new SignalListener();
+
+    getSimulation()->getSystemModule()->subscribe("asent", listener);
+    getSimulation()->getSystemModule()->subscribe("asentactual", listener);
+    getSimulation()->getSystemModule()->subscribe("brecv", listener);
+//    sentSignal = registerSignal("asentall");
+//    recvSignal = registerSignal("brecvall");
+    abratioSignal = registerSignal("abratioall");
+
     sendMessageEvent = new cMessage("sendMessageEvent");
     scheduleAt(simTime(), sendMessageEvent);
 }
@@ -80,9 +96,6 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
         cObject *payload = msg->getObject("ctx");
         ContextSync *ctx = check_and_cast<ContextSync *>(payload);
         const char *device = ctx->getDevice();
-//        double x = ctx->getX();
-//        double y = ctx->getY();
-//        ctx->setName(device);
         msg->setName(device);
         participant->set(msg);
         return;
@@ -93,6 +106,17 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     if (participant->size() != numberOfMobileHost){
         return;
     }
+
+//    std::cout << "A sent: " << listener->getAsent() << "\n";
+//    std::cout << "A sent actual: " << listener->getAsentactual() << "\n";
+//    std::cout << "B recv: "  << listener->getBrecv() << "\n";
+//    emit(sentSignal, listener->getAsent());
+//    emit(recvSignal, listener->getBrecv());
+
+    emit(abratioSignal, listener->getAsent() != 0 ? listener->getBrecv()*100/listener->getAsent() : 1);
+    listener->setAsent(0);
+    listener->setBrecv(0);
+    listener->setAsentactual(0);
 
     operations_research::Solver solver("CPSimple");
 
@@ -109,8 +133,11 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
         a_hosts_x.push_back(static_cast<int64>(obj->getX()));
         a_hosts_y.push_back(static_cast<int64>(obj->getY()));
         a_hosts.push_back(obj);
-    }
 
+//        b_hosts_x.push_back(static_cast<int64>(obj->getX()));
+//        b_hosts_y.push_back(static_cast<int64>(obj->getY()));
+//        b_hosts.push_back(obj);
+    }
 
     for (cModule::SubmoduleIterator it(parent); !it.end(); it++)
     {
@@ -145,12 +172,19 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     // turn a into x: function of a
     // x_a = a_hosts_x[a]
     operations_research::IntExpr* const x_a = solver.MakeElement(a_hosts_x, a);
+    operations_research::IntExpr* const y_a = solver.MakeElement(a_hosts_y, a);
     operations_research::IntExpr* const x_b = solver.MakeElement(b_hosts_x, b);
+    operations_research::IntExpr* const y_b = solver.MakeElement(b_hosts_y, b);
 
     operations_research::IntExpr* a_b_x_abs_difference = solver.MakeAbs(solver.MakeDifference(x_a, x_b));
-    operations_research::Constraint* nearby = solver.MakeLessOrEqual(a_b_x_abs_difference, 30);
+    operations_research::IntExpr* a_b_y_abs_difference = solver.MakeAbs(solver.MakeDifference(y_a, y_b));
+    operations_research::Constraint* nearbyX = solver.MakeLessOrEqual(a_b_x_abs_difference, 1000);
+    operations_research::Constraint* nearbyY = solver.MakeLessOrEqual(a_b_y_abs_difference, 1000);
+    operations_research::Constraint* differentHost = solver.MakeNonEquality(a, b);
 
-    solver.AddConstraint(nearby);
+    solver.AddConstraint(nearbyX);
+    solver.AddConstraint(nearbyY);
+    solver.AddConstraint(differentHost);
     operations_research::DecisionBuilder* const db = solver.MakePhase(allvars,
             operations_research::Solver::CHOOSE_FIRST_UNBOUND,
             operations_research::Solver::ASSIGN_MIN_VALUE);
@@ -159,35 +193,46 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     collector->Add(a);
     collector->Add(b);
 
-    if (solver.Solve(db, solver.MakeTimeLimit(500), collector)){
-        int numOfSolutions = collector->solution_count();
-        printf("\nNumber of solutions: %d", numOfSolutions);
+    if (!solver.Solve(db, solver.MakeTimeLimit(500), collector)){
+        return;
+    }
 
-        std::map<std::string, int> dupCheck;
-        std::vector<std::array<std::string, 2>> coordinationResults = {};
 
-        for (int i = 0; i < numOfSolutions; i++){
+    std::map<std::string, int> dupCheck;
+    std::string coordinationResultsStr = "|";
 
-            std::array<std::string, 2> result;
+    int numOfSolutions = collector->solution_count();
+    int numOfCoordSolutions = 0;
+    for (int i = 0; i < numOfSolutions; i++){
 
-            const char *aAssignment = a_hosts.at(collector->Value(i, a))->getDevice();
-            const char *bAssignment = b_hosts.at(collector->Value(i, b))->getDevice();
-            printf("\na,b: %s %s\n", aAssignment,  bAssignment);
+        std::string resultStr = "";
 
-            std::string aStr(aAssignment);
-            std::string bStr(bAssignment);
+        const char *aAssignment = a_hosts.at(collector->Value(i, a))->getDevice();
+        const char *bAssignment = b_hosts.at(collector->Value(i, b))->getDevice();
 
-            if (dupCheck.find(aStr) == dupCheck.end() &&
-                    dupCheck.find(bStr) == dupCheck.end()){
-                dupCheck.insert(std::pair<std::string, int>(aStr, 1));
-                dupCheck.insert(std::pair<std::string, int>(bStr, 1));
-                result = {aStr, bStr};
-                coordinationResults.push_back(result);
-            } else {
-                continue;
-            }
+        std::string aStr(aAssignment);
+        std::string bStr(bAssignment);
+
+        if (dupCheck.find(aStr) == dupCheck.end() &&
+                dupCheck.find(bStr) == dupCheck.end()){
+            dupCheck.insert(std::pair<std::string, int>(aStr, 1));
+            dupCheck.insert(std::pair<std::string, int>(bStr, 1));
+            resultStr += aStr + "-" + bStr;
+            coordinationResultsStr += resultStr + "|";
+            numOfCoordSolutions++;
+        } else {
+            continue;
         }
-        std::cout << "\nNumber of coordination solutions: " << coordinationResults.size();
+    }
+
+//    std::cout << "Sending assignments " << numOfCoordSolutions << "\n";
+
+    for (int i = 0; i < gateSize("action"); i++) {
+        cGate *gatee = gate("action", i);
+        cMessage *coordinationAction = new cMessage();
+        coordinationAction->addPar("action");
+        coordinationAction->par("action").setStringValue(coordinationResultsStr.c_str());
+        send(coordinationAction, gatee);
     }
 }
 

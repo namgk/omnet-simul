@@ -23,6 +23,9 @@ class Component : public cSimpleModule
   const char *name;
   const char *device;
 
+  private:
+    simsignal_t recvSignal;
+
   protected:
     // The following redefined virtual function holds the algorithm.
     virtual void initialize() override;
@@ -42,6 +45,8 @@ void Component::initialize()
         return;
     }
 
+    recvSignal = registerSignal("brecv");
+
     name = getName();
     device = grandParent->getFullName();
     EV_INFO << " >>>> " << device << " >>>> " << name;
@@ -49,10 +54,12 @@ void Component::initialize()
 
 void Component::handleMessage(cMessage *msg)
 {
+    emit(recvSignal, 1);
     cGate *g = gate("out");
     cGate *otherGate = g->getType()==cGate::OUTPUT ? g->getNextGate() : g->getPreviousGate();
     if (otherGate){
         send(msg, "out");
     } else {
+        delete msg;
     }
 }

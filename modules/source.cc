@@ -8,6 +8,8 @@
 //
 
 #include <omnetpp.h>
+#include "inet/mobility/single/MassMobility.h"
+#include <cmath>
 
 using namespace omnetpp;
 
@@ -21,6 +23,8 @@ class Source : public cSimpleModule
 
     private:
         cMessage *sendMessageEvent;
+        simsignal_t sentSignal;
+        simsignal_t sentSignalActual;
 
     public:
         Source();
@@ -54,6 +58,9 @@ void Source::initialize()
         return;
     }
 
+    sentSignal = registerSignal("asent");
+    sentSignalActual = registerSignal("asentactual");
+
     name = getName();
     device = grandParent->getFullName();
     EV_INFO << " >>>> " << device << " >>>> " << name;
@@ -66,14 +73,47 @@ void Source::handleMessage(cMessage *msg)
 {
     ASSERT(msg == sendMessageEvent);
 
-    for (int i = 0; i < gateSize("out"); i++) {
-        cGate *g = gate("out", i);
-        cGate *otherGate = g->getType()==cGate::OUTPUT ? g->getNextGate() : g->getPreviousGate();
-        if (otherGate){
-            cMessage *job = new cMessage("job");
-            send(job, "out", i);
-        } else {
+    const char hostName[] = "mobileHost";
+    if (strcmp (hostName, getParentModule()->getParentModule()->getName()) != 0){
+        return;
+    }
+
+    emit(sentSignal, 1);
+    cGate *g = gate("out", 0);
+    cGate *otherGate = g->getNextGate();
+    if (otherGate){
+        try {
+            cModule *peerDevice = otherGate->getOwnerModule()->getParentModule()->getParentModule();
+
+            if (peerDevice){
+                inet::Coord coord;
+                inet::Coord peerCoord;
+
+                inet::MobilityBase *mobThis = check_and_cast<inet::MobilityBase *>(getParentModule()->getParentModule()->getSubmodule("mobility"));
+                inet::MobilityBase *mob = check_and_cast<inet::MobilityBase *>(peerDevice->getSubmodule("mobility"));
+
+                coord = mobThis->getCurrentPosition();
+                peerCoord = mob->getCurrentPosition();
+
+                double x = coord.x;
+                double y = coord.y;
+                double peerX = peerCoord.x;
+                double peerY = peerCoord.y;
+
+                if (std::abs (peerX - x) > 1000 || std::abs (peerY - y) > 1000 ){
+//                    printf("---------------DISCONNECTING------------------- %lf %lf %lf %lf\n", x, y, peerX, peerY);
+                    g->disconnect();
+                } else {
+                    cMessage *job = new cMessage("job");
+                    send(job, "out", 0);
+                    emit(sentSignalActual, 1);
+                }
+
+            }
+        } catch( std::exception e ) {
+            printf("eeeeeeeeeeeeeeeeeeeeeeeee %s\n", e.what());
         }
+
     }
 
     scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);

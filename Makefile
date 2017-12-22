@@ -34,8 +34,11 @@ OBJS = \
     $O/modules/centralizedCoordinator.o \
     $O/modules/component.o \
     $O/modules/ContextSync.o \
+    $O/modules/CoordinationResult.o \
     $O/modules/localCoordinator.o \
     $O/modules/mobileHost.o \
+    $O/modules/SampleApp.o \
+    $O/modules/SignalListener.o \
     $O/modules/sink.o \
     $O/modules/source.o
 

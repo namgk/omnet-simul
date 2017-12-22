@@ -16,6 +16,7 @@
 #include <string.h>
 #include <omnetpp.h>
 #include "ContextSync.h"
+#include "CoordinationResult.h"
 
 //#include "inet/common/geometry/common/Coord.h"
 #include "inet/mobility/single/MassMobility.h"
@@ -26,7 +27,10 @@ class LocalCoordinator : public cSimpleModule
 {
     const char *name;
     const char *device;
+    // host
     cModule *parent;
+    // network
+    cModule *grandParent;
     cModule *mobility;
 
     private:
@@ -54,14 +58,16 @@ LocalCoordinator::~LocalCoordinator()
 
 void LocalCoordinator::initialize()
 {
-    parent = getParentModule();
+    parent = getParentModule();// host
     if (!parent){
         return;
     }
-    cModule *grandParent = parent->getParentModule();
+    grandParent = parent->getParentModule(); // network
     if (!grandParent){
         return;
     }
+
+//    printf("Parent: %s\n", grandParent->getFullName());
 
     mobility = parent->getSubmodule("mobility");
     if (!mobility){
@@ -89,6 +95,53 @@ void LocalCoordinator::initialize()
 
 void LocalCoordinator::handleMessage(cMessage *msgx)
 {
+    if (msgx != sendMessageEvent){
+        const char* actions = msgx->par("action").stringValue();
+
+        // e.g actions: mobileHost[2]-cloudHost[0]|mobileHost[3]-cloudHost[1]
+        // e.g device: mobileHost[3]
+        char *pch = strstr(actions, device);
+        if (pch != NULL){
+            int idx = pch - actions;//pointer to integer
+            if (actions[idx-1] == '|'){
+                // this plays 'a' role, sender, e.g mobileHost[3]
+                // now, send to whom? e.g cloudHost[1]
+                char *afterDash = strchr(pch, '-') + 1; // finding '-' pointer
+                char *vertical = strchr(afterDash, '|');
+                int l = vertical - afterDash;
+                char destination[l+1];
+                strncpy(destination, afterDash, l);
+                destination[l] = '\0';
+                cModule *source = parent->getSubmodule("app")->getSubmodule("a");
+                cModule *dest = grandParent->getModuleByPath(destination)->getSubmodule("app")->getSubmodule("b");
+                if (dest != NULL){
+                    cGate *sourceGate = source->gate("out", 0);
+                    cGate *destGate = dest->gate("in");
+//                    std::cout << "connecting: " << sourceGate->getFullPath() << " to: " << destGate->getFullPath() << "\n";
+                    cGate *prevGate = destGate->getPreviousGate();
+                    if (prevGate != NULL){
+                        prevGate->disconnect();
+                    }
+                    sourceGate->disconnect();
+                    sourceGate->connectTo(destGate);
+                }
+            } else {
+                // this plays 'b' role, receiver
+                // now, receive from whom?
+                // work backward from pch (<--|)
+                while (pch[0] != '|'){
+                    pch = pch - 1;
+                }
+                char * pch2 = strchr(pch, '|') + 1;
+                char * pch3 = strchr(pch2, '-');
+                int l = pch3 - pch2;
+//                printf("Receiving from: %.*s\n", l, pch2);
+            }
+        }
+
+        delete msgx;
+        return;
+    }
     scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
     inet::Coord coord;
 
