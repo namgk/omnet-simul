@@ -1,0 +1,45 @@
+file 33066 1514870813                                           
+version 2
+run MoBANMobility1-0-20180101-21:24:53-64698
+attr configname MoBANMobility1
+attr datetime 20180101-21:24:53
+attr experiment MoBANMobility1
+attr inifile omnetpp.ini
+attr iterationvars ""
+attr iterationvarsf ""
+attr measurement ""
+attr network FogNetwork
+attr processid 64698
+attr repetition 0
+attr replication #0
+attr resultdir results
+attr runnumber 0
+attr seedset 0
+param **.a.sendIaTime truncnormal(10s,2s)
+param **.centralizedCoordinator.coordinationPeriod truncnormal(10s,2s)
+param **.cloudHost*.mobility.initFromDisplayString false
+param **.constraintAreaMaxX 1000m
+param **.constraintAreaMaxY 1000m
+param **.constraintAreaMaxZ 0m
+param **.constraintAreaMinX 0m
+param **.constraintAreaMinY 0m
+param **.constraintAreaMinZ 0m
+param **.coordinator.sendIaTime truncnormal(5s,2s)
+param **.fogHost*.mobility.initFromDisplayString false
+param **.fogHost*.mobility.x -1
+param **.fogHost*.mobility.y -1
+param **.mobileHost*.mobility.changeAngleBy "normal(0deg, 90deg)"
+param **.mobileHost*.mobility.changeInterval "truncnormal(5s, 0.5s)"
+param **.mobileHost*.mobility.initFromDisplayString false
+param **.mobileHost*.mobility.speed "truncnormal(15mps, 5mps)"
+param **.mobility.initFromDisplayString false
+param **.updateInterval 1s
+param *.numCloudHosts 0
+param *.numFogHosts 50
+param *.numHosts 300
+
+vector 0  FogNetwork.centralizedCoordinator  abratio:vector  ETV
+attr interpolationmode  none
+attr source  abratioall
+attr title  "send/recv, vector"
+0	1457 31609 7420 5467964 14.482312761939 10333.320096379557 1032 0 20 16669 270683
