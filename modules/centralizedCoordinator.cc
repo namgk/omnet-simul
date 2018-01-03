@@ -34,19 +34,18 @@ class CentralizedCoordinator : public cSimpleModule
     const char *name;
     cModule *parent;
     cArray *participant;
+
     SignalListener *listener;
-//    simsignal_t sentSignal;
-//    simsignal_t recvSignal;
-    simsignal_t abratioSignal;
+    simsignal_t sentRecvSignal;
 
     private:
         cMessage *sendMessageEvent;
     public:
         double numberOfMobileHost;
+        int nearbyDef;
         CentralizedCoordinator();
         virtual ~CentralizedCoordinator();
     protected:
-        // The following redefined virtual function holds the algorithm.
         virtual void initialize() override;
         virtual void handleMessage(cMessage *msg) override;
 };
@@ -73,18 +72,16 @@ void CentralizedCoordinator::initialize()
         return;
     }
 
+    // Event listener for result collecting
+    listener = new SignalListener();
+    getSimulation()->getSystemModule()->subscribe("sent", listener);
+    getSimulation()->getSystemModule()->subscribe("recv", listener);
+    sentRecvSignal = registerSignal("sentrecv");
+
     numberOfMobileHost = parent->par("numHosts").doubleValue();
+    nearbyDef = parent->par("nearbyDef").operator int();
 
     participant = new cArray("participant", 100, 10);
-
-    listener = new SignalListener();
-
-    getSimulation()->getSystemModule()->subscribe("asent", listener);
-    getSimulation()->getSystemModule()->subscribe("asentactual", listener);
-    getSimulation()->getSystemModule()->subscribe("brecv", listener);
-//    sentSignal = registerSignal("asentall");
-//    recvSignal = registerSignal("brecvall");
-    abratioSignal = registerSignal("abratioall");
 
     sendMessageEvent = new cMessage("sendMessageEvent");
     scheduleAt(simTime(), sendMessageEvent);
@@ -93,6 +90,7 @@ void CentralizedCoordinator::initialize()
 void CentralizedCoordinator::handleMessage(cMessage *msg)
 {
     if (msg != sendMessageEvent){
+        // context sync sent from participating devices, only from moving components
         cObject *payload = msg->getObject("ctx");
         ContextSync *ctx = check_and_cast<ContextSync *>(payload);
         const char *device = ctx->getDevice();
@@ -101,44 +99,54 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
         return;
     }
 
+    // periodic coordination execution
     scheduleAt(simTime()+par("coordinationPeriod").doubleValue(), sendMessageEvent);
 
     if (participant->size() != numberOfMobileHost){
         return;
     }
 
-//    std::cout << "A sent: " << listener->getAsent() << "\n";
-//    std::cout << "A sent actual: " << listener->getAsentactual() << "\n";
-//    std::cout << "B recv: "  << listener->getBrecv() << "\n";
-//    emit(sentSignal, listener->getAsent());
-//    emit(recvSignal, listener->getBrecv());
+    // broadcast sent/received ratio and reset counter
+    emit(sentRecvSignal, listener->getSent() != 0 ? listener->getRecv()*100/listener->getSent() : 1);
+    listener->setSent(0);
+    listener->setRecv(0);
 
-    emit(abratioSignal, listener->getAsent() != 0 ? listener->getBrecv()*100/listener->getAsent() : 1);
-    listener->setAsent(0);
-    listener->setBrecv(0);
-    listener->setAsentactual(0);
-
+    // initiate constraint solver
     operations_research::Solver solver("CPSimple");
 
+    // to stores all hosts running 'a' components and their coordinate
     std::vector<ContextSync*> a_hosts = {};
     std::vector<int64> a_hosts_x = {};
     std::vector<int64> a_hosts_y = {};
+
+    // to stores all hosts running b' components
     std::vector<ContextSync*> b_hosts = {};
     std::vector<int64> b_hosts_x = {};
     std::vector<int64> b_hosts_y = {};
 
+    // to stores all hosts running 'c' components and their coordinate
+    std::vector<ContextSync*> c_hosts = {};
+    std::vector<int64> c_hosts_x = {};
+    std::vector<int64> c_hosts_y = {};
+
+    // fill up the component stores for moving components (a,c)
+    // here we assume every mobile device runs both a and c
     for (int i = 0; i < participant->size(); i++) {
         cMessage *savedMsg = (cMessage *) participant->get(i);
         ContextSync *obj = check_and_cast<ContextSync *>(savedMsg->getObject("ctx"));
+
         a_hosts_x.push_back(static_cast<int64>(obj->getX()));
         a_hosts_y.push_back(static_cast<int64>(obj->getY()));
         a_hosts.push_back(obj);
 
-//        b_hosts_x.push_back(static_cast<int64>(obj->getX()));
-//        b_hosts_y.push_back(static_cast<int64>(obj->getY()));
-//        b_hosts.push_back(obj);
+        c_hosts_x.push_back(static_cast<int64>(obj->getX()));
+        c_hosts_y.push_back(static_cast<int64>(obj->getY()));
+        c_hosts.push_back(obj);
     }
 
+    // fill up the component stores for stationary components (b)
+    // here we get from the centralized database as these components do not move
+    // hence no context sync required
     for (cModule::SubmoduleIterator it(parent); !it.end(); it++)
     {
       cModule *submodule = *it;
@@ -157,49 +165,62 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
               ContextSync *bCtx = new ContextSync();
               bCtx->setDevice(submodule->getFullName());
               b_hosts.push_back(bCtx);
-          } catch( std::exception e ) {
-          }
+          } catch( std::exception e ) {}
       }
     }
 
+    // three variables: the a, b, c components
     operations_research::IntVar* const a = solver.MakeIntVar(0, a_hosts_x.size() - 1);
     operations_research::IntVar* const b = solver.MakeIntVar(0, b_hosts_x.size() - 1);
+    operations_research::IntVar* const c = solver.MakeIntVar(0, c_hosts_x.size() - 1);
 
     std::vector<operations_research::IntVar*> allvars = {};
     allvars.push_back(a);
     allvars.push_back(b);
+    allvars.push_back(c);
 
-    // turn a into x: function of a
-    // x_a = a_hosts_x[a]
+    // now setting up constraints
+
+    // 1, setup locations of a and c
     operations_research::IntExpr* const x_a = solver.MakeElement(a_hosts_x, a);
     operations_research::IntExpr* const y_a = solver.MakeElement(a_hosts_y, a);
-    operations_research::IntExpr* const x_b = solver.MakeElement(b_hosts_x, b);
-    operations_research::IntExpr* const y_b = solver.MakeElement(b_hosts_y, b);
+    operations_research::IntExpr* const x_c = solver.MakeElement(c_hosts_x, c);
+    operations_research::IntExpr* const y_c = solver.MakeElement(c_hosts_y, c);
 
-    operations_research::IntExpr* a_b_x_abs_difference = solver.MakeAbs(solver.MakeDifference(x_a, x_b));
-    operations_research::IntExpr* a_b_y_abs_difference = solver.MakeAbs(solver.MakeDifference(y_a, y_b));
-    operations_research::Constraint* nearbyX = solver.MakeLessOrEqual(a_b_x_abs_difference, 1000);
-    operations_research::Constraint* nearbyY = solver.MakeLessOrEqual(a_b_y_abs_difference, 1000);
-    operations_research::Constraint* differentHost = solver.MakeNonEquality(a, b);
+    // 2, define nearby constraint for a and c
+    operations_research::IntExpr* a_c_x_abs_difference = solver.MakeAbs(solver.MakeDifference(x_a, x_c));
+    operations_research::IntExpr* a_c_y_abs_difference = solver.MakeAbs(solver.MakeDifference(y_a, y_c));
+    operations_research::Constraint* nearbyX = solver.MakeLessOrEqual(a_c_x_abs_difference, nearbyDef);
+    operations_research::Constraint* nearbyY = solver.MakeLessOrEqual(a_c_y_abs_difference, nearbyDef);
+
+    // 3, define different host constraint for a and c
+    operations_research::Constraint* differentHost = solver.MakeNonEquality(a, c);
+
+    // 4 a, b, c dependency constraint: just pick any b because there's no constraint on b
 
     solver.AddConstraint(nearbyX);
     solver.AddConstraint(nearbyY);
     solver.AddConstraint(differentHost);
+
+    // decision configuration
     operations_research::DecisionBuilder* const db = solver.MakePhase(allvars,
             operations_research::Solver::CHOOSE_FIRST_UNBOUND,
             operations_research::Solver::ASSIGN_MIN_VALUE);
 
+    // setup the result collector
     operations_research::SolutionCollector *collector = solver.MakeAllSolutionCollector();
     collector->Add(a);
     collector->Add(b);
+    collector->Add(c);
 
-    if (!solver.Solve(db, solver.MakeTimeLimit(500), collector)){
+    // solve the problem
+    if (!solver.Solve(db, solver.MakeTimeLimit(5000), collector)){
         return;
     }
 
-
+    //  solution duplication check: this is to derive as many solution as possible
     std::map<std::string, int> dupCheck;
-    std::string coordinationResultsStr = "|";
+    std::string coordinationResultsStr = " ";
 
     int numOfSolutions = collector->solution_count();
     int numOfCoordSolutions = 0;
@@ -209,23 +230,28 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
 
         const char *aAssignment = a_hosts.at(collector->Value(i, a))->getDevice();
         const char *bAssignment = b_hosts.at(collector->Value(i, b))->getDevice();
+        const char *cAssignment = c_hosts.at(collector->Value(i, c))->getDevice();
 
         std::string aStr(aAssignment);
         std::string bStr(bAssignment);
+        std::string cStr(cAssignment);
 
-        if (dupCheck.find(aStr) == dupCheck.end() &&
-                dupCheck.find(bStr) == dupCheck.end()){
-            dupCheck.insert(std::pair<std::string, int>(aStr, 1));
-            dupCheck.insert(std::pair<std::string, int>(bStr, 1));
-            resultStr += aStr + "-" + bStr;
-            coordinationResultsStr += resultStr + "|";
+        // if not exist in the map, add/count the result
+        if (dupCheck.find('a'+aStr) == dupCheck.end() &&
+                dupCheck.find('b'+bStr) == dupCheck.end() &&
+                dupCheck.find('c'+cStr) == dupCheck.end()){
+            dupCheck.insert(std::pair<std::string, int>('a'+aStr, 1));
+            dupCheck.insert(std::pair<std::string, int>('b'+bStr, 1));
+            dupCheck.insert(std::pair<std::string, int>('c'+cStr, 1));
+            resultStr += aStr + "-" + bStr + "-" + cStr;
+            coordinationResultsStr += resultStr + " ";
             numOfCoordSolutions++;
         } else {
             continue;
         }
     }
 
-//    std::cout << "Sending assignments " << numOfCoordSolutions << "\n";
+//    std::cout << "Sending assignments " << coordinationResultsStr.c_str() << "\n";
 
     for (int i = 0; i < gateSize("action"); i++) {
         cGate *gatee = gate("action", i);

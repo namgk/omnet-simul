@@ -12,35 +12,26 @@ using namespace omnetpp;
 
 class SignalListener: public cListener {
     public:
-        long asent;
-        long asentactual;
-        long brecv;
+        long sentMsg;
+        long recvMsg;
     public:
         SignalListener();
         virtual ~SignalListener();
 
-    long getAsent() const {
-        return asent;
+    long getSent() const {
+        return sentMsg;
     }
 
-    void setAsent(long asent) {
-        this->asent = asent;
+    void setSent(long sent) {
+        this->sentMsg = sent;
     }
 
-    long getBrecv() const {
-        return brecv;
+    long getRecv() const {
+        return recvMsg;
     }
 
-    void setBrecv(long brecv) {
-        this->brecv = brecv;
-    }
-
-    long getAsentactual() const {
-        return asentactual;
-    }
-
-    void setAsentactual(long asentactual) {
-        this->asentactual = asentactual;
+    void setRecv(long recv) {
+        this->recvMsg = recv;
     }
 
     protected:

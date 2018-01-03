@@ -58,8 +58,7 @@ void Source::initialize()
         return;
     }
 
-    sentSignal = registerSignal("asent");
-    sentSignalActual = registerSignal("asentactual");
+    sentSignal = registerSignal("sent");
 
     name = getName();
     device = grandParent->getFullName();
@@ -106,7 +105,6 @@ void Source::handleMessage(cMessage *msg)
                 } else {
                     cMessage *job = new cMessage("job");
                     send(job, "out", 0);
-                    emit(sentSignalActual, 1);
                 }
 
             }

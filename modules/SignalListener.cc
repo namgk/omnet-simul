@@ -12,9 +12,8 @@ using namespace omnetpp;
 
 SignalListener::SignalListener() {
     // TODO Auto-generated constructor stub
-    asent = 0;
-    asentactual = 0;
-    brecv = 0;
+    sentMsg = 0;
+    recvMsg = 0;
 }
 
 SignalListener::~SignalListener() {
@@ -22,16 +21,13 @@ SignalListener::~SignalListener() {
 }
 
 void SignalListener::receiveSignal(cComponent *src, simsignal_t id, long d, cObject *details){
-    const char aSentSignal[] = "asent";
-    const char aSentActualSignal[] = "asentactual";
-    const char bRecvSignal[] = "brecv";
+    const char sentSignal[] = "sent";
+    const char recvSignal[] = "recv";
     const char *signalName = src->getSignalName(id);
-    if (strcmp (signalName, aSentSignal) == 0){
-        asent++;
-    } else if (strcmp (signalName, aSentActualSignal) == 0){
-        asentactual++;
-    } else if (strcmp (signalName, bRecvSignal) == 0){
-        brecv++;
+    if (strcmp (signalName, sentSignal) == 0){
+        sentMsg++;
+    } else if (strcmp (signalName, recvSignal) == 0){
+        recvMsg++;
     }
 }
 

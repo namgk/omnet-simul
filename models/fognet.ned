@@ -37,10 +37,6 @@ module CoordinatedHost
 }
 simple Component
 {
-    parameters:
-        @signal[brecv](type="long");
-//        @statistic[msgRecv](title="msg recv"; source="brecv"; record=vector,stats; interpolationmode=none);
-     
     gates:
         input in;
         output out;
@@ -50,9 +46,8 @@ simple Source
     parameters:
         volatile double sendIaTime @unit(s);
         @display("i=block/source");
-        @signal[asent](type="long");
-        @signal[asentactual](type="long");
-//        @statistic[msgSent](title="msg sent"; source="asent"; record=vector,stats; interpolationmode=none);
+        @signal[sent](type="long");
+        @statistic[sent](title="send"; source="sent"; record=vector,stats; interpolationmode=none);
         
     gates:
         output out[2];
@@ -61,6 +56,8 @@ simple Sink
 {
     parameters:
         @display("i=block/sink");
+        @signal[recv](type="long");
+        @statistic[recv](title="recv"; source="recv"; record=vector,stats; interpolationmode=none);
     gates:
         input in;
 }
@@ -76,12 +73,8 @@ simple CentralizedCoordinator
 {
     parameters:
         volatile double coordinationPeriod @unit(s);
-//        @signal[asentall](type="long");
-//        @signal[brecvall](type="long");
-        @signal[abratioall](type="long");
-//        @statistic[asent](title="msg sent"; source="asentall"; record=vector,stats; interpolationmode=none);
-//        @statistic[brecv](title="msg recv"; source="brecvall"; record=vector,stats; interpolationmode=none);
-        @statistic[abratio](title="send/recv"; source="abratioall"; record=vector,stats; interpolationmode=none);
+        @signal[sentrecv](type="long");
+        @statistic[sentrecv](title="send/recv"; source="sentrecv"; record=vector,stats; interpolationmode=none);
         
     gates:
         input sync[];
@@ -138,6 +131,7 @@ network FogNetwork
 {
     parameters:
         int numHosts;
+        int nearbyDef;
         int numFogHosts;
         int numCloudHosts;
     types:
