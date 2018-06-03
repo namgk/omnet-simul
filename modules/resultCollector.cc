@@ -94,7 +94,7 @@ void ResultCollector::handleMessage(cMessage *msg)
         // broadcast sent/received ratio and reset counter
         if (listener->getSent() != 0){
             emit(sentRecvSignal, listener->getRecv()*100/listener->getSent());
-            emit(droppedSignal, listener->setDroppedMsg()*100/listener->getSent());
+            emit(droppedSignal, listener->getDroppedMsg()*100/listener->getSent());
             listener->setSent(0);
             listener->setRecv(0);
             listener->setDroppedMsg(0);

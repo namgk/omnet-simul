@@ -232,11 +232,8 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
     // assuming we only use location as the only dynamic context data here
     try {
         inet::StationaryMobility *mob = check_and_cast<inet::StationaryMobility *>(mobility);
-//        printf("SKIPPING CONTEXT SYNC FROM STATIONARY DEVICES");
         return;
-    } catch( std::exception e ) {
-//        printf("GOT A MOBILE DEVICE, CONTINUE WITH CONTEXT SYNC");
-    }
+    } catch( std::exception e ) {}
 
     try {
         inet::MobilityBase *mob = check_and_cast<inet::MobilityBase *>(mobility);
