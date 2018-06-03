@@ -23,6 +23,10 @@ class Component : public cSimpleModule
   const char *name;
   const char *device;
 
+  private:
+        simsignal_t componentRecv;
+        simsignal_t componentSent;
+
   protected:
     // The following redefined virtual function holds the algorithm.
     virtual void initialize() override;
@@ -42,6 +46,9 @@ void Component::initialize()
         return;
     }
 
+    componentRecv = registerSignal("componentRecv");
+    componentSent = registerSignal("componentSent");
+
     name = getName();
     device = grandParent->getFullName();
     EV_INFO << " >>>> " << device << " >>>> " << name;
@@ -49,9 +56,12 @@ void Component::initialize()
 
 void Component::handleMessage(cMessage *msg)
 {
+    emit(componentRecv, 1);
+
     cGate *g = gate("out");
     cGate *otherGate = g->getType()==cGate::OUTPUT ? g->getNextGate() : g->getPreviousGate();
     if (otherGate){
+        emit(componentSent, 1);
         send(msg, "out");
     } else {
         delete msg;

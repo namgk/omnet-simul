@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for tutorial
 #
 # This file was generated with the command:
-#  opp_makemake -f --deep -O out -KINET_PROJ=../inet -DINET_IMPORT -I. -Iortools/include -I$$\(INET_PROJ\)/src -L$$\(INET_PROJ\)/out/$$\(CONFIGNAME\)/src -lINET -Xortools -- ./ortools/lib/*.dylib
+#  opp_makemake -f --deep -O out -KINET_PROJ=../inet -KVEINS_PROJ=/Users/nhong/Downloads/veins-veins-4.6 -DINET_IMPORT -I. -Iortools/include -I$$\(INET_PROJ\)/src -Isrc -L$$\(INET_PROJ\)/out/$$\(CONFIGNAME\)/src -L$$\(VEINS_PROJ\)/out/$$\(CONFIGNAME\)/src -lINET -lveins -Xortools -- ./ortools/lib/*.dylib
 #
 
 # Name of target to be created (-o option)
@@ -15,13 +15,13 @@ USERIF_LIBS = $(ALL_ENV_LIBS) # that is, $(TKENV_LIBS) $(QTENV_LIBS) $(CMDENV_LI
 #USERIF_LIBS = $(QTENV_LIBS)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I. -Iortools/include -I$(INET_PROJ)/src
+INCLUDE_PATH = -I. -Iortools/include -I$(INET_PROJ)/src -Isrc
 
 # Additional object and library files to link with
 EXTRA_OBJS = ./ortools/lib/*.dylib
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)$(INET_PROJ)/out/$(CONFIGNAME)/src  -lINET
+LIBS = $(LDFLAG_LIBPATH)$(INET_PROJ)/out/$(CONFIGNAME)/src $(LDFLAG_LIBPATH)$(VEINS_PROJ)/out/$(CONFIGNAME)/src  -lINET -lveins
 
 # Output directory
 PROJECT_OUTPUT_DIR = out
@@ -37,6 +37,7 @@ OBJS = \
     $O/modules/CoordinationResult.o \
     $O/modules/localCoordinator.o \
     $O/modules/mobileHost.o \
+    $O/modules/resultCollector.o \
     $O/modules/SampleApp.o \
     $O/modules/SignalListener.o \
     $O/modules/sink.o \
@@ -50,6 +51,7 @@ SMFILES =
 
 # Other makefile variables (-K)
 INET_PROJ=../inet
+VEINS_PROJ=/Users/nhong/Downloads/veins-veins-4.6
 
 #------------------------------------------------------------------------------
 
@@ -74,7 +76,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = $(OPPMAIN_LIB) $(USERIF_LIBS) $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(TOOLCHAIN_NAME),clangc2)
-LIBS += -Wl,-rpath,$(abspath $(INET_PROJ)/out/$(CONFIGNAME)/src)
+LIBS += -Wl,-rpath,$(abspath $(INET_PROJ)/out/$(CONFIGNAME)/src) -Wl,-rpath,$(abspath $(VEINS_PROJ)/out/$(CONFIGNAME)/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DINET_IMPORT $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)

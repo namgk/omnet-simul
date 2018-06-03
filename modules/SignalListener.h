@@ -14,6 +14,8 @@ class SignalListener: public cListener {
     public:
         long sentMsg;
         long recvMsg;
+        long droppedMsg;
+        long solutionSentMsg;
     public:
         SignalListener();
         virtual ~SignalListener();
@@ -32,6 +34,22 @@ class SignalListener: public cListener {
 
     void setRecv(long recv) {
         this->recvMsg = recv;
+    }
+
+    long getDroppedMsg() const {
+        return droppedMsg;
+    }
+
+    void setDroppedMsg(long droppedMsg) {
+        this->droppedMsg = droppedMsg;
+    }
+
+    long getSolutionSentMsg() const {
+        return solutionSentMsg;
+    }
+
+    void setSolutionSentMsg(long solutionSentMsg) {
+        this->solutionSentMsg = solutionSentMsg;
     }
 
     protected:

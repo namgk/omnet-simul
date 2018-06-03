@@ -37,6 +37,12 @@ module CoordinatedHost
 }
 simple Component
 {
+    parameters:
+        @signal[componentSent](type="long");
+        @signal[componentRecv](type="long");
+        @statistic[componentSent](title="componentSent"; source="componentSent"; record=vector,stats; interpolationmode=none);
+        @statistic[componentRecv](title="componentRecv"; source="componentRecv"; record=vector,stats; interpolationmode=none);
+        
     gates:
         input in;
         output out;
@@ -48,7 +54,7 @@ simple Source
         @display("i=block/source");
         @signal[sent](type="long");
         @statistic[sent](title="send"; source="sent"; record=vector,stats; interpolationmode=none);
-        
+
     gates:
         output out[2];
 }
@@ -57,7 +63,9 @@ simple Sink
     parameters:
         @display("i=block/sink");
         @signal[recv](type="long");
+        @signal[dropped](type="long");
         @statistic[recv](title="recv"; source="recv"; record=vector,stats; interpolationmode=none);
+        @statistic[dropped](title="dropped"; source="dropped"; record=vector,stats; interpolationmode=none);
     gates:
         input in;
 }
@@ -65,6 +73,16 @@ simple LocalCoordinator
 {
     parameters:
         volatile double sendIaTime @unit(s);
+        @signal[speed](type="double");
+        @statistic[speed](title="speed"; source="speed"; record=vector,stats; interpolationmode=none);
+        @signal[bFound](type="long");
+        @statistic[bFound](title="bFound"; source="bFound"; record=vector,stats; interpolationmode=none);
+        @signal[cFound](type="long");
+        @statistic[cFound](title="cFound"; source="cFound"; record=vector,stats; interpolationmode=none);
+        @signal[reuseConnection](type="long");
+        @statistic[reuseConnection](title="reuseConnection"; source="reuseConnection"; record=vector,stats; interpolationmode=none);
+        @signal[reuseConnectionBC](type="long");
+        @statistic[reuseConnectionBC](title="reuseConnectionBC"; source="reuseConnectionBC"; record=vector,stats; interpolationmode=none);
     gates:
         input action;
         output sync;
@@ -73,13 +91,27 @@ simple CentralizedCoordinator
 {
     parameters:
         volatile double coordinationPeriod @unit(s);
-        @signal[sentrecv](type="long");
-        @statistic[sentrecv](title="send/recv"; source="sentrecv"; record=vector,stats; interpolationmode=none);
-        
+        @signal[solutionsSent](type="long");
+        @statistic[solutionsSent](title="solutionsSent"; source="solutionsSent"; record=vector,stats; interpolationmode=none);
+
     gates:
         input sync[];
         output action[];
 }
+
+simple ResultCollector
+{
+    parameters:
+        volatile double sendIaTime @unit(s);
+	    volatile double coordinationPeriod @unit(s);
+        @signal[sentrecv](type="long");
+        @signal[totalSolution](type="long");
+        @signal[dropped](type="long");
+        @statistic[sentrecv](title="send/recv"; source="sentrecv"; record=vector,stats; interpolationmode=none);
+        @statistic[totalSolution](title="totalSolution"; source="totalSolution"; record=vector,stats; interpolationmode=none);
+        @statistic[dropped](title="dropped"; source="dropped"; record=vector,stats; interpolationmode=none);
+}
+
 
 module App
 {
@@ -104,9 +136,11 @@ module MobileHost extends CoordinatedHost
     parameters:
         string mobilityType = default("MassMobility");
         @networkNode();
-        @display("i=device/pocketpc_s");
+        @display("i=device/pocketpc_s;bgb=252,117");
     submodules:
-        mobility: <mobilityType> like IMobility;
+        mobility: <mobilityType> like IMobility {
+            @display("p=215,86");
+        }
 }
 
 module CloudHost extends CoordinatedHost
@@ -123,6 +157,7 @@ module FogHost extends CoordinatedHost
     parameters:
         string mobilityType = default("StationaryMobility");
         @networkNode();
+        @display("bgb=252,117");
     submodules:
         mobility: <mobilityType> like IMobility;
 }
@@ -132,8 +167,10 @@ network FogNetwork
     parameters:
         int numHosts;
         int nearbyDef;
+        int solverTimeLimit;
         int numFogHosts;
         int numCloudHosts;
+        int numCoord;
     types:
         channel Channel extends ned.DelayChannel
         {
@@ -149,28 +186,49 @@ network FogNetwork
                 @display("p=96,85;i=device/server_l");
         }
         fogHost[numFogHosts]: FogHost {
-                @display("i=device/switch");
+            @display("i=device/switch;p=289,240");
         }
-        centralizedCoordinator: CentralizedCoordinator {
-            @display("p=272,85");
+        centralizedCoordinator[numCoord]: CentralizedCoordinator {
+        }
+        resultCollector: ResultCollector {
         }
     connections:
         for i=0..numHosts-1 {
-            mobileHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+            mobileHost[i].sync --> Channel --> centralizedCoordinator[i % numCoord].sync++;
         }
         for i=0..numHosts-1 {
-            centralizedCoordinator.action++ --> Channel --> mobileHost[i].action;
+            centralizedCoordinator[i % numCoord].action++ --> Channel --> mobileHost[i].action;
         }
         for i=0..numFogHosts-1 {
-            fogHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+            fogHost[i].sync --> Channel --> centralizedCoordinator[i % numCoord].sync++;
         }
         for i=0..numFogHosts-1 {
-            centralizedCoordinator.action++ --> Channel --> fogHost[i].action;
+            centralizedCoordinator[i % numCoord].action++ --> Channel --> fogHost[i].action;
         }
-        for i=0..numCloudHosts-1 {
-            cloudHost[i].sync --> Channel --> centralizedCoordinator.sync++;
-        }
-        for i=0..numCloudHosts-1 {
-            centralizedCoordinator.action++ --> Channel --> cloudHost[i].action;
-        }
+//        for i=0..numCloudHosts/2 {
+//            cloudHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+//        }
+//        for i=0..numCloudHosts/2 {
+//            centralizedCoordinator.action++ --> Channel --> cloudHost[i].action;
+//        }
+        
+        
+//        for i=0..numHosts-1, if i%2 != 0 {
+//            mobileHost[i].sync --> Channel --> centralizedCoordinator[1].sync++;
+//        }
+//        for i=0..numHosts-1, if i%2 != 0 {
+//            centralizedCoordinator[1].action++ --> Channel --> mobileHost[i].action;
+//        }
+//        for i=0..numFogHosts-1, if i%2 != 0 {
+//            fogHost[i].sync --> Channel --> centralizedCoordinator[1].sync++;
+//        }
+//        for i=0..numFogHosts-1, if i%2 != 0 {
+//            centralizedCoordinator[1].action++ --> Channel --> fogHost[i].action;
+//        }
+//        for i=numCloudHosts/2+1..numCloudHosts-1 {
+//            cloudHost[i].sync --> Channel --> centralizedCoordinator.sync++;
+//        }
+//        for i=numCloudHosts/2+1..numCloudHosts-1 {
+//            centralizedCoordinator.action++ --> Channel --> cloudHost[i].action;
+//        }
 }

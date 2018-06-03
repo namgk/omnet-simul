@@ -16,7 +16,6 @@
 #include <string.h>
 #include <omnetpp.h>
 #include "inet/common/geometry/common/Coord.h"
-#include "inet/mobility/single/MassMobility.h"
 #include "inet/mobility/static/StationaryMobility.h"
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/linear_solver/linear_solver.pb.h"
@@ -34,15 +33,21 @@ class CentralizedCoordinator : public cSimpleModule
     const char *name;
     cModule *parent;
     cArray *participant;
+    double speed;
+    int myNumber;
 
     SignalListener *listener;
-    simsignal_t sentRecvSignal;
+    simsignal_t solutionsSent;
+//    simsignal_t sentRecvSignal;
+//    simsignal_t totalSpeedSignal;
 
     private:
         cMessage *sendMessageEvent;
     public:
         double numberOfMobileHost;
+        int numberOfCoord;
         int nearbyDef;
+        int solverTimeLimit;
         CentralizedCoordinator();
         virtual ~CentralizedCoordinator();
     protected:
@@ -73,15 +78,30 @@ void CentralizedCoordinator::initialize()
     }
 
     // Event listener for result collecting
-    listener = new SignalListener();
-    getSimulation()->getSystemModule()->subscribe("sent", listener);
-    getSimulation()->getSystemModule()->subscribe("recv", listener);
-    sentRecvSignal = registerSignal("sentrecv");
+//    listener = new SignalListener();
+//    getSimulation()->getSystemModule()->subscribe("sent", listener);
+//    getSimulation()->getSystemModule()->subscribe("recv", listener);
+//    sentRecvSignal = registerSignal("sentrecv");
+//    totalSpeedSignal = registerSignal("totalspeed");
+    solutionsSent = registerSignal("solutionsSent");
 
     numberOfMobileHost = parent->par("numHosts").doubleValue();
+    numberOfCoord = parent->par("numCoord").operator int();
     nearbyDef = parent->par("nearbyDef").operator int();
+    solverTimeLimit = parent->par("solverTimeLimit").operator int();
 
     participant = new cArray("participant", 100, 10);
+//    speed = 0;
+
+    const char *device = getFullName();
+    const char *openSquareBracket = strchr(device, '[') + 1;
+    const char *closeSquareBracket = strchr(device, ']');
+    int length = closeSquareBracket - openSquareBracket;
+    char deviceName[length+1];
+    strncpy(deviceName, openSquareBracket, length);
+    deviceName[length] = '\0';
+    std::string deviceStr(deviceName);
+    myNumber = std::stoi(deviceStr);
 
     sendMessageEvent = new cMessage("sendMessageEvent");
     scheduleAt(simTime(), sendMessageEvent);
@@ -102,14 +122,16 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     // periodic coordination execution
     scheduleAt(simTime()+par("coordinationPeriod").doubleValue(), sendMessageEvent);
 
-    if (participant->size() != numberOfMobileHost){
-        return;
-    }
+//    if (participant->size() != numberOfMobileHost){
+//        return;
+//    }
 
     // broadcast sent/received ratio and reset counter
-    emit(sentRecvSignal, listener->getSent() != 0 ? listener->getRecv()*100/listener->getSent() : 1);
-    listener->setSent(0);
-    listener->setRecv(0);
+//    if (listener->getSent() != 0){
+//        emit(sentRecvSignal, listener->getRecv()*100/listener->getSent());
+//        listener->setSent(0);
+//        listener->setRecv(0);
+//    }
 
     // initiate constraint solver
     operations_research::Solver solver("CPSimple");
@@ -131,18 +153,36 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
 
     // fill up the component stores for moving components (a,c)
     // here we assume every mobile device runs both a and c
+//    speed = 0;
+//    std::cout << "processing a and c";
     for (int i = 0; i < participant->size(); i++) {
         cMessage *savedMsg = (cMessage *) participant->get(i);
         ContextSync *obj = check_and_cast<ContextSync *>(savedMsg->getObject("ctx"));
+//        speed += obj->getS();
 
-        a_hosts_x.push_back(static_cast<int64>(obj->getX()));
-        a_hosts_y.push_back(static_cast<int64>(obj->getY()));
-        a_hosts.push_back(obj);
+//        const char *device = obj->getDevice();
+//        const char *openSquareBracket = strchr(device, '[') + 1;
+//        const char *closeSquareBracket = strchr(device, ']');
+//        int length = closeSquareBracket - openSquareBracket;
+//        char deviceName[length+1];
+//        strncpy(deviceName, openSquareBracket, length);
+//        deviceName[length] = '\0';
+//        std::string deviceStr(deviceName);
+//        int deviceNumber = std::stoi(deviceStr);
 
-        c_hosts_x.push_back(static_cast<int64>(obj->getX()));
-        c_hosts_y.push_back(static_cast<int64>(obj->getY()));
-        c_hosts.push_back(obj);
+//        if (deviceNumber % 2 == 0){
+            a_hosts_x.push_back(static_cast<int64>(obj->getX()));
+            a_hosts_y.push_back(static_cast<int64>(obj->getY()));
+            a_hosts.push_back(obj);
+
+            c_hosts_x.push_back(static_cast<int64>(obj->getX()));
+            c_hosts_y.push_back(static_cast<int64>(obj->getY()));
+            c_hosts.push_back(obj);
+//        }
     }
+
+    // broadcast total speed and reset counter
+//    emit(totalSpeedSignal, speed);
 
     // fill up the component stores for stationary components (b)
     // here we get from the centralized database as these components do not move
@@ -152,22 +192,52 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
       cModule *submodule = *it;
       const char hostName[] = "mobileHost";
       const char *subName = submodule->getName();
+      // not mobileHost
       if (strcmp (hostName,subName) != 0){
-          // immobile, fog, cloud
+          // fog, cloud
           cModule *mobility = submodule->getSubmodule("mobility");
+          if (!mobility){
+              continue;
+          }
           try {
               inet::StationaryMobility *mob = check_and_cast<inet::StationaryMobility *>(mobility);
               inet::Coord coord = mob->getCurrentPosition();
               std::string coordInfo = coord.info();
 
-              b_hosts_x.push_back(static_cast<int64>(coord.x));
-              b_hosts_y.push_back(static_cast<int64>(coord.y));
-              ContextSync *bCtx = new ContextSync();
-              bCtx->setDevice(submodule->getFullName());
-              b_hosts.push_back(bCtx);
-          } catch( std::exception e ) {}
+              const char *device = submodule->getFullName();
+              const char *openSquareBracket = strchr(device, '[') + 1;
+              const char *closeSquareBracket = strchr(device, ']');
+              int length = closeSquareBracket - openSquareBracket;
+              char deviceName[length+1];
+              strncpy(deviceName, openSquareBracket, length);
+              deviceName[length] = '\0';
+              std::string deviceStr(deviceName);
+              int deviceNumber = std::stoi(deviceStr);
+
+              if ((deviceNumber % numberOfCoord) == myNumber ){
+                  b_hosts_x.push_back(static_cast<int64>(coord.x));
+                  b_hosts_y.push_back(static_cast<int64>(coord.y));
+                  ContextSync *bCtx = new ContextSync();
+                  bCtx->setDevice(submodule->getFullName());
+                  b_hosts.push_back(bCtx);
+              }
+          } catch( std::exception e ) {
+              printf("BUG ALERT!!!");
+              printf("%s", e.what());
+          }
       }
     }
+
+
+    if (a_hosts_x.size() != b_hosts_x.size() && b_hosts_x.size() != c_hosts_x.size())
+        return;
+
+
+//    std::cout << a_hosts_x.size() << " ";
+//    std::cout << b_hosts_x.size() << " ";
+//    std::cout << c_hosts_x.size() << " ";
+//    std::cout << "aiwjef" << " ";
+
 
     // three variables: the a, b, c components
     operations_research::IntVar* const a = solver.MakeIntVar(0, a_hosts_x.size() - 1);
@@ -213,10 +283,11 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     collector->Add(b);
     collector->Add(c);
 
-    // solve the problem
-    if (!solver.Solve(db, solver.MakeTimeLimit(5000), collector)){
+    // solve the problem in ms time limit requirement
+    if (!solver.Solve(db, solver.MakeTimeLimit(solverTimeLimit), collector)){
         return;
     }
+
 
     //  solution duplication check: this is to derive as many solution as possible
     std::map<std::string, int> dupCheck;
@@ -251,6 +322,7 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
         }
     }
 
+    emit(solutionsSent, numOfCoordSolutions);
 //    std::cout << "Sending assignments " << coordinationResultsStr.c_str() << "\n";
 
     for (int i = 0; i < gateSize("action"); i++) {

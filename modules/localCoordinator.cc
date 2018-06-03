@@ -17,9 +17,11 @@
 #include <omnetpp.h>
 #include "ContextSync.h"
 #include "CoordinationResult.h"
+#include <math.h>
 
 //#include "inet/common/geometry/common/Coord.h"
-#include "inet/mobility/single/MassMobility.h"
+#include "inet/mobility/base/MobilityBase.h"
+#include "inet/mobility/static/StationaryMobility.h"
 
 using namespace omnetpp;
 
@@ -35,6 +37,11 @@ class LocalCoordinator : public cSimpleModule
 
     private:
         cMessage *sendMessageEvent;
+        simsignal_t bFound;
+        simsignal_t cFound;
+        simsignal_t reuseConnection;
+        simsignal_t reuseConnectionBC;
+        simsignal_t speed;
     public:
         LocalCoordinator();
         virtual ~LocalCoordinator();
@@ -83,7 +90,11 @@ void LocalCoordinator::initialize()
 //        EV_ERROR << msg << endl;
 //    }
 
-
+    speed = registerSignal("speed");
+    bFound = registerSignal("bFound");
+    cFound = registerSignal("cFound");
+    reuseConnection = registerSignal("reuseConnection");
+    reuseConnectionBC = registerSignal("reuseConnectionBC");
 
     name = getName();//coordinator
     device = parent->getFullName();
@@ -107,9 +118,9 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
         std::vector<std::string>::iterator itr;
         for ( itr = vstrings.begin(); itr < vstrings.end(); ++itr ){
             // am I involved?
-            // FIXME: 'me' could present in two different location. E.g a,b,c => 1,2,3; 2,3,1; 3,1,2
+            // NOTE: 'me' could present in two different location. E.g a,b,c => 1,2,3; 2,3,1; 3,1,2
             const char* actions = itr->c_str();
-            char *me = strstr(actions, device);
+            const char *me = strstr(actions, device);
             if (me == NULL){
                 // I'm not involved, do nothing
                 continue;
@@ -123,9 +134,9 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
                 // now, send to whom? e.g cloudHost[1] --> calculate destination
 
                 // finding the next '-' pointer, starting after it to get the actual name!
-                char *afterDash = strchr(me, '-') + 1;
+                const char *afterDash = strchr(me, '-') + 1;
                 // finding the coming '-' pointer
-                char *nextDash = strchr(afterDash, '-');
+                const char *nextDash = strchr(afterDash, '-');
 
                 // extract destination
                 int length = nextDash - afterDash;
@@ -141,15 +152,18 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
                 cModule *bNode = grandParent->getModuleByPath(destination)->getSubmodule("app")->getSubmodule("b");
 
                 if (bNode != NULL){
+                    emit(bFound, 1);
                     cGate *aGate = aNode->gate("out", 0);
                     cGate *bGate = bNode->gate("in");
 
-                    // disconnect b first so that this a can connect to it
+                    // if the same a, b already connected, do nothing
                     cGate *bPrevGate = bGate->getPreviousGate();
                     if (bPrevGate != NULL && bPrevGate == aGate){
+                        emit(reuseConnection, 1);
                         continue;
                     }
 
+                    // disconnect b first so that this a can connect to it
                     if (bPrevGate != NULL){
                         bPrevGate->disconnect();
                     }
@@ -162,10 +176,10 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
                 // determining if it's b, we need to find it's destination too, similar to the a case
 
                 // finding the next '-' pointer
-                char *nextDash = strchr(me, '-');
+                const char *nextDash = strchr(me, '-');
                 if (nextDash != NULL){
                     // this plays b
-                    char *end = strchr(nextDash, '\0');
+                    const char *end = strchr(nextDash, '\0');
 
                     // extract destination
                     int length = end - nextDash - 1;
@@ -184,12 +198,14 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
                         cGate *bGate = bNode->gate("out");
                         cGate *cGatee = cNode->gate("in");
 
-                        // disconnect c first so that this b can connect to it
+                        // reuse existing connection
                         cGate *cPrevGate = cGatee->getPreviousGate();
                         if (cPrevGate != NULL && cPrevGate == bGate){
+                            emit(reuseConnectionBC, 1);
                             continue;
                         }
 
+                        // disconnect c first so that this b can connect to it
                         if (cPrevGate != NULL){
                             cPrevGate->disconnect();
                         }
@@ -210,29 +226,44 @@ void LocalCoordinator::handleMessage(cMessage *msgx)
     // periodic context synchronization with centralized coordinator
     scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
     inet::Coord coord;
+    inet::Coord currentSpeed;
+
+    // skip context sync for stationary components because
+    // assuming we only use location as the only dynamic context data here
+    try {
+        inet::StationaryMobility *mob = check_and_cast<inet::StationaryMobility *>(mobility);
+//        printf("SKIPPING CONTEXT SYNC FROM STATIONARY DEVICES");
+        return;
+    } catch( std::exception e ) {
+//        printf("GOT A MOBILE DEVICE, CONTINUE WITH CONTEXT SYNC");
+    }
 
     try {
-        inet::MassMobility *mob = check_and_cast<inet::MassMobility *>(mobility);
+        inet::MobilityBase *mob = check_and_cast<inet::MobilityBase *>(mobility);
         coord = mob->getCurrentPosition();
+        currentSpeed = mob->getCurrentSpeed();
     } catch( std::exception e ) {
-        // skip context sync for stationary components because
-        // assuming we only use location as the only dynamic context data here
         return;
     }
 
     std::string coordInfo = coord.info();
     double x = coord.x;
     double y = coord.y;
+    double s = std::sqrt(std::pow(currentSpeed.x, 2) + std::pow(currentSpeed.y, 2));
 
     cMessage *msg = new cMessage();
     ContextSync *payload = new ContextSync();
     payload->setDevice(device);
     payload->setX(x);
     payload->setY(y);
+    payload->setS(s);
 
     msg->addObject(payload);
 
     send(msg, "sync");
+//    double artificialSpeed = sin(SIMTIME_DBL(simTime()) );
+//    emit(speed, artificialSpeed);
 
-//        EV_INFO << " _________ " << coordInfo;
+//    printf(" SENDING SPEED: %f ", s);
+        EV_INFO << " _________ " << coordInfo;
 }

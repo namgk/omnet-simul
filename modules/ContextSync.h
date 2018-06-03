@@ -12,6 +12,7 @@ class ContextSync : public ::omnetpp::cNamedObject{
         const char *device;
         double x;
         double y;
+        double s;
 
     public:
         ContextSync();
@@ -43,6 +44,14 @@ class ContextSync : public ::omnetpp::cNamedObject{
 
     void setY(double y) {
         this->y = y;
+    }
+
+    double getS() const {
+        return s;
+    }
+
+    void setS(double s) {
+        this->s = s;
     }
 };
 

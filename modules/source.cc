@@ -21,6 +21,10 @@ class Source : public cSimpleModule
     const char *name;
     const char *device;
 
+    cModule *parent;//app
+    cModule *grandParent;//host
+    cModule *mobility;
+
     private:
         cMessage *sendMessageEvent;
         simsignal_t sentSignal;
@@ -49,14 +53,16 @@ Source::~Source()
 
 void Source::initialize()
 {
-    cModule *parent = getParentModule();
+    parent = getParentModule();
     if (!parent){
         return;
     }
-    cModule *grandParent = parent->getParentModule();
+    grandParent = parent->getParentModule();
     if (!grandParent){
         return;
     }
+
+    mobility = grandParent->getSubmodule("mobility");
 
     sentSignal = registerSignal("sent");
 
@@ -71,50 +77,63 @@ void Source::initialize()
 void Source::handleMessage(cMessage *msg)
 {
     ASSERT(msg == sendMessageEvent);
+    scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
 
     const char hostName[] = "mobileHost";
-    if (strcmp (hostName, getParentModule()->getParentModule()->getName()) != 0){
+    const char *subName = grandParent->getName();
+    if (strcmp (hostName,subName) != 0){
+        // filter out immobile, fog, cloud
         return;
     }
 
     emit(sentSignal, 1);
-    cGate *g = gate("out", 0);
-    cGate *otherGate = g->getNextGate();
+    cGate *otherGate = gate("out", 0)->getNextGate();
     if (otherGate){
         try {
-            cModule *peerDevice = otherGate->getOwnerModule()->getParentModule()->getParentModule();
-
-            if (peerDevice){
-                inet::Coord coord;
-                inet::Coord peerCoord;
-
-                inet::MobilityBase *mobThis = check_and_cast<inet::MobilityBase *>(getParentModule()->getParentModule()->getSubmodule("mobility"));
-                inet::MobilityBase *mob = check_and_cast<inet::MobilityBase *>(peerDevice->getSubmodule("mobility"));
-
-                coord = mobThis->getCurrentPosition();
-                peerCoord = mob->getCurrentPosition();
-
-                double x = coord.x;
-                double y = coord.y;
-                double peerX = peerCoord.x;
-                double peerY = peerCoord.y;
-
-                if (std::abs (peerX - x) > 1000 || std::abs (peerY - y) > 1000 ){
-//                    printf("---------------DISCONNECTING------------------- %lf %lf %lf %lf\n", x, y, peerX, peerY);
-                    g->disconnect();
-                } else {
-                    cMessage *job = new cMessage("job");
-                    send(job, "out", 0);
-                }
-
-            }
+            inet::MobilityBase *mob = check_and_cast<inet::MobilityBase *>(mobility);
+            inet::Coord coord = mob->getCurrentPosition();
+            cMessage *job = new cMessage("job");
+            job->addPar("x");
+            job->par("x").setDoubleValue(coord.x);
+            job->addPar("y");
+            job->par("y").setDoubleValue(coord.x);
+            send(job, "out", 0);
         } catch( std::exception e ) {
-            printf("eeeeeeeeeeeeeeeeeeeeeeeee %s\n", e.what());
+            EV_ERROR << msg << endl;
         }
 
-    }
+//        try {
+//            cModule *peerDevice = otherGate->getOwnerModule()->getParentModule()->getParentModule();
+//
+//            if (peerDevice){
+//                inet::Coord coord;
+//                inet::Coord peerCoord;
+//
+//                inet::MobilityBase *mobThis = check_and_cast<inet::MobilityBase *>(getParentModule()->getParentModule()->getSubmodule("mobility"));
+//                inet::MobilityBase *mob = check_and_cast<inet::MobilityBase *>(peerDevice->getSubmodule("mobility"));
+//
+//                coord = mobThis->getCurrentPosition();
+//                peerCoord = mob->getCurrentPosition();
+//
+//                double x = coord.x;
+//                double y = coord.y;
+//                double peerX = peerCoord.x;
+//                double peerY = peerCoord.y;
+//
+//                if (std::abs (peerX - x) > 1000 || std::abs (peerY - y) > 1000 ){
+////                    printf("---------------DISCONNECTING------------------- %lf %lf %lf %lf\n", x, y, peerX, peerY);
+//                    g->disconnect();
+//                } else {
+//                    cMessage *job = new cMessage("job");
+//                    send(job, "out", 0);
+//                }
+//
+//            }
+//        } catch( std::exception e ) {
+//            printf("eeeeeeeeeeeeeeeeeeeeeeeee %s\n", e.what());
+//        }
 
-    scheduleAt(simTime()+par("sendIaTime").doubleValue(), sendMessageEvent);
+    }
 }
 
 
