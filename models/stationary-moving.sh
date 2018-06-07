@@ -10,6 +10,10 @@ declare -a cases=(
                   "fast_mooving_"
                  )
 
+FINAL_RECVSENT=recvsent.result
+FINAL_SOLUTIONS=solutions.result
+FINAL_DROPPED=dropped.result
+
 for j in "${cases[@]}"
 do
     PREFIX=$j
@@ -19,6 +23,10 @@ do
     RESULT_FILE_2=$PREFIX.solutionssent.result
     RESULT_FILE_3=$PREFIX.dropped.result
 
+    pasteArg="$pasteArg $RESULT_FILE"
+    pasteArg2="$pasteArg2 $RESULT_FILE_2"
+    pasteArg3="$pasteArg3 $RESULT_FILE_3"
+    
     rm -rf $RESULT_FILE && touch $RESULT_FILE
     rm -rf $RESULT_FILE_2 && touch $RESULT_FILE_2
     rm -rf $RESULT_FILE_3 && touch $RESULT_FILE_3
@@ -39,3 +47,6 @@ do
     
 done
 
+paste $pasteArg > $FINAL_RECVSENT
+paste $pasteArg2 > $FINAL_SOLUTIONS
+paste $pasteArg3 > $FINAL_DROPPED
