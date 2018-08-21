@@ -92,7 +92,13 @@ simple CentralizedCoordinator
     parameters:
         volatile double coordinationPeriod @unit(s);
         @signal[solutionsSent](type="long");
+        @signal[aReused](type="long");
+        @signal[bReused](type="long");
+        @signal[cReused](type="long");
         @statistic[solutionsSent](title="solutionsSent"; source="solutionsSent"; record=vector,stats; interpolationmode=none);
+        @statistic[aReused](title="aReused"; source="aReused"; record=vector,stats; interpolationmode=none);
+        @statistic[bReused](title="bReused"; source="bReused"; record=vector,stats; interpolationmode=none);
+        @statistic[cReused](title="cReused"; source="cReused"; record=vector,stats; interpolationmode=none);
 
     gates:
         input sync[];
@@ -105,11 +111,15 @@ simple ResultCollector
         volatile double sendIaTime @unit(s);
 	    volatile double coordinationPeriod @unit(s);
         @signal[sentrecv](type="long");
+        @signal[bskipped](type="long");
         @signal[totalSolution](type="long");
         @signal[dropped](type="long");
+        @signal[reused](type="long");
         @statistic[sentrecv](title="send/recv"; source="sentrecv"; record=vector,stats; interpolationmode=none);
         @statistic[totalSolution](title="totalSolution"; source="totalSolution"; record=vector,stats; interpolationmode=none);
         @statistic[dropped](title="dropped"; source="dropped"; record=vector,stats; interpolationmode=none);
+        @statistic[bskipped](title="bskipped"; source="bskipped"; record=vector,stats; interpolationmode=none);
+        @statistic[reused](title="reused"; source="reused"; record=vector,stats; interpolationmode=none);
 }
 
 

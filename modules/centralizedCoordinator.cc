@@ -15,6 +15,8 @@
 
 #include <string.h>
 #include <omnetpp.h>
+#include <cmath>
+
 #include "inet/common/geometry/common/Coord.h"
 #include "inet/mobility/static/StationaryMobility.h"
 #include "ortools/linear_solver/linear_solver.h"
@@ -22,7 +24,7 @@
 #include "ortools/constraint_solver/constraint_solveri.h"
 
 #include "ContextSync.h"
-#include "SignalListener.h"
+#include "Assignment.h"
 #include "CoordinationResult.h"
 
 
@@ -33,11 +35,16 @@ class CentralizedCoordinator : public cSimpleModule
     const char *name;
     cModule *parent;
     cArray *participant;
+    cArray *pastAssignmentsByA;
+    cArray *pastAssignmentsByC;
+    cArray *bTobeSkipped;
     double speed;
     int myNumber;
 
-    SignalListener *listener;
     simsignal_t solutionsSent;
+    simsignal_t aReused;
+    simsignal_t bReused;
+    simsignal_t cReused;
 
     private:
         cMessage *sendMessageEvent;
@@ -63,6 +70,9 @@ CentralizedCoordinator::~CentralizedCoordinator()
 {
     cancelAndDelete(sendMessageEvent);
     delete participant;
+    delete bTobeSkipped;
+    delete pastAssignmentsByA;
+    delete pastAssignmentsByC;
 }
 
 void CentralizedCoordinator::initialize()
@@ -76,13 +86,19 @@ void CentralizedCoordinator::initialize()
     }
 
     solutionsSent = registerSignal("solutionsSent");
+    aReused = registerSignal("aReused");
+    bReused = registerSignal("bReused");
+    cReused = registerSignal("cReused");
 
     numberOfMobileHost = parent->par("numHosts").doubleValue();
     numberOfCoord = parent->par("numCoord").operator int();
     nearbyDef = parent->par("nearbyDef").operator int();
     solverTimeLimit = parent->par("solverTimeLimit").operator int();
 
-    participant = new cArray("participant", 100, 10);
+    participant = new cArray("participant", numberOfMobileHost*2/numberOfCoord, 100);
+    pastAssignmentsByA = new cArray("pastAssignmentsA", numberOfMobileHost/numberOfCoord, 100);
+    pastAssignmentsByC = new cArray("pastAssignmentsC", numberOfMobileHost/numberOfCoord, 100);
+    bTobeSkipped = new cArray("bTobeSkipped", numberOfMobileHost/numberOfCoord, 100);
 
     const char *device = getFullName();
     const char *openSquareBracket = strchr(device, '[') + 1;
@@ -127,7 +143,6 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
     std::vector<ContextSync*> c_hosts = {};
     std::vector<int64> c_hosts_x = {};
     std::vector<int64> c_hosts_y = {};
-
     // fill up the component stores for moving components (a,c)
     // here we assume every mobile device runs both a and c
     for (int i = 0; i < participant->size(); i++) {
@@ -136,14 +151,65 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
         const char* deviceName = obj->getDevice();
 
         // check deviceName, obj X.Y to see if they already satisfy the requirement
+        // find the last peers of this deviceName: source and sink peer
+        Assignment *sourcePeers = (Assignment *) pastAssignmentsByC->get(deviceName);
+        Assignment *sinkPeers = (Assignment *) pastAssignmentsByA->get(deviceName);
 
-        a_hosts_x.push_back(static_cast<int64>(obj->getX()));
-        a_hosts_y.push_back(static_cast<int64>(obj->getY()));
-        a_hosts.push_back(obj);
+        if (sourcePeers){
+            printf("%s", sourcePeers);
+            const char* sourcePeerName = sourcePeers->getA(); // a ->
+            cMessage *sourceSyncMsg = (cMessage *) participant->get(sourcePeerName);
+            ContextSync *sourceSyncCtx = check_and_cast<ContextSync *>(sourceSyncMsg->getObject("ctx"));
+            double lastSourceX = sourceSyncCtx->getX();
+            double lastSourceY = sourceSyncCtx->getY();
+            double lastSourceDiffX = std::abs (lastSourceX - obj->getX());
+            double lastSourceDiffY = std::abs (lastSourceY - obj->getY());
 
-        c_hosts_x.push_back(static_cast<int64>(obj->getX()));
-        c_hosts_y.push_back(static_cast<int64>(obj->getY()));
-        c_hosts.push_back(obj);
+            if (lastSourceDiffX > nearbyDef || lastSourceDiffY > nearbyDef){
+                // this obj (act as c) and its corresponding a do not meet the constraints
+                c_hosts_x.push_back(static_cast<int64>(obj->getX()));
+                c_hosts_y.push_back(static_cast<int64>(obj->getY()));
+                c_hosts.push_back(obj);
+            } else {
+                emit(cReused, 1);
+                const char* componentPeerName = sourcePeers->getB();
+                cMessage *componentSyncMsg = (cMessage *) participant->get(componentPeerName);
+                if (componentSyncMsg){
+                    bTobeSkipped->set(componentSyncMsg);
+                }
+            }
+        } else {
+            c_hosts_x.push_back(static_cast<int64>(obj->getX()));
+            c_hosts_y.push_back(static_cast<int64>(obj->getY()));
+            c_hosts.push_back(obj);
+        }
+
+        if (sinkPeers){
+            const char* sinkPeerName = sinkPeers->getC(); // -> c
+            cMessage *sinkSyncMsg = (cMessage *) participant->get(sinkPeerName);
+            ContextSync *sinkSyncCtx = check_and_cast<ContextSync *>(sinkSyncMsg->getObject("ctx"));
+            double lastSinkX = sinkSyncCtx->getX();
+            double lastSinkY = sinkSyncCtx->getY();
+            double lastSinkDiffX = std::abs (lastSinkX - obj->getX());
+            double lastSinkDiffY = std::abs (lastSinkY - obj->getY());
+
+            if (lastSinkDiffX > nearbyDef || lastSinkDiffY > nearbyDef){
+                a_hosts_x.push_back(static_cast<int64>(obj->getX()));
+                a_hosts_y.push_back(static_cast<int64>(obj->getY()));
+                a_hosts.push_back(obj);
+            } else {
+                emit(aReused, 1);
+                const char* componentPeerName = ((Assignment *) pastAssignmentsByA->get(deviceName))->getB();
+                cMessage *componentSyncMsg = (cMessage *) participant->get(componentPeerName);
+                if (componentSyncMsg){
+                    bTobeSkipped->set(componentSyncMsg);
+                }
+            }
+        } else {
+            a_hosts_x.push_back(static_cast<int64>(obj->getX()));
+            a_hosts_y.push_back(static_cast<int64>(obj->getY()));
+            a_hosts.push_back(obj);
+        }
     }
 
     // fill up the component stores for stationary components (b)
@@ -179,8 +245,14 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
               if ((deviceNumber % numberOfCoord) == myNumber ){
                   // checking if submodule with coord.x and coord.y still satisfy
                   // the requirement
+                  if (bTobeSkipped->get(submodule->getFullName())){
+                      emit(bReused, 1);
+                      continue;
+                  }
+                  
                   ContextSync *bCtx = new ContextSync();
                   bCtx->setDevice(submodule->getFullName());
+                  
                   b_hosts.push_back(bCtx);
                   b_hosts_x.push_back(static_cast<int64>(coord.x));
                   b_hosts_y.push_back(static_cast<int64>(coord.y));
@@ -273,6 +345,11 @@ void CentralizedCoordinator::handleMessage(cMessage *msg)
             dupCheck.insert(std::pair<std::string, int>('b'+bStr, 1));
             dupCheck.insert(std::pair<std::string, int>('c'+cStr, 1));
             resultStr += aStr + "-" + bStr + "-" + cStr;
+            Assignment *resultAssignment = new Assignment(aAssignment, bAssignment, cAssignment);
+            pastAssignmentsByA->set(resultAssignment);
+            Assignment *resultAssignmentByC = new Assignment(aAssignment, bAssignment, cAssignment);
+            resultAssignmentByC->setName(cAssignment);
+            pastAssignmentsByC->set(resultAssignmentByC);
             coordinationResultsStr += resultStr + " ";
             numOfCoordSolutions++;
         } else {

@@ -14,6 +14,11 @@ class SignalListener: public cListener {
     public:
         long sentMsg;
         long recvMsg;
+        long aReusedMsg;
+        long bReusedMsg;
+        long cReusedMsg;
+        long componentRecvMsg;
+        long componentSentMsg;
         long droppedMsg;
         long solutionSentMsg;
     public:
@@ -50,6 +55,46 @@ class SignalListener: public cListener {
 
     void setSolutionSentMsg(long solutionSentMsg) {
         this->solutionSentMsg = solutionSentMsg;
+    }
+
+    long getComponentRecvMsg() const {
+        return componentRecvMsg;
+    }
+
+    void setComponentRecvMsg(long componentRecvMsg) {
+        this->componentRecvMsg = componentRecvMsg;
+    }
+
+    long getComponentSentMsg() const {
+        return componentSentMsg;
+    }
+
+    void setComponentSentMsg(long componentSentMsg) {
+        this->componentSentMsg = componentSentMsg;
+    }
+
+    long getAReusedMsg() const {
+        return aReusedMsg;
+    }
+
+    void setAReusedMsg(long reusedMsg) {
+        aReusedMsg = reusedMsg;
+    }
+
+    long getBReusedMsg() const {
+        return bReusedMsg;
+    }
+
+    void setBReusedMsg(long reusedMsg) {
+        bReusedMsg = reusedMsg;
+    }
+
+    long getCReusedMsg() const {
+        return cReusedMsg;
+    }
+
+    void setCReusedMsg(long reusedMsg) {
+        cReusedMsg = reusedMsg;
     }
 
     protected:

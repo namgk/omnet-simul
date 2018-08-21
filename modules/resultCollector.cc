@@ -33,6 +33,8 @@ class ResultCollector : public cSimpleModule
     SignalListener *listener;
     simsignal_t sentRecvSignal;
     simsignal_t droppedSignal;
+    simsignal_t bSkippedSignal;
+    simsignal_t reusedSignal;
     simsignal_t totalSolutionSentSignal;
 
     private:
@@ -64,12 +66,19 @@ void ResultCollector::initialize()
 
     sentRecvSignal = registerSignal("sentrecv");
     droppedSignal = registerSignal("dropped");
+    bSkippedSignal = registerSignal("bskipped");
+    reusedSignal = registerSignal("reused");
     totalSolutionSentSignal = registerSignal("totalSolution");
 
     // Event listener for result collecting
     listener = new SignalListener();
     getSimulation()->getSystemModule()->subscribe("sent", listener);
     getSimulation()->getSystemModule()->subscribe("recv", listener);
+    getSimulation()->getSystemModule()->subscribe("aReused", listener);
+    getSimulation()->getSystemModule()->subscribe("bReused", listener);
+    getSimulation()->getSystemModule()->subscribe("cReused", listener);
+    getSimulation()->getSystemModule()->subscribe("componentRecv", listener);
+    getSimulation()->getSystemModule()->subscribe("componentSent", listener);
     getSimulation()->getSystemModule()->subscribe("dropped", listener);
     getSimulation()->getSystemModule()->subscribe("solutionsSent", listener);
 
@@ -95,8 +104,15 @@ void ResultCollector::handleMessage(cMessage *msg)
         if (listener->getSent() != 0){
             emit(sentRecvSignal, listener->getRecv()*100/listener->getSent());
             emit(droppedSignal, listener->getDroppedMsg()*100/listener->getSent());
+            emit(bSkippedSignal, listener->getComponentRecvMsg() - listener->getComponentSentMsg());
+            emit(reusedSignal, listener->getAReusedMsg() + listener->getBReusedMsg() + listener->getCReusedMsg());
             listener->setSent(0);
             listener->setRecv(0);
+            listener->setAReusedMsg(0);
+            listener->setBReusedMsg(0);
+            listener->setCReusedMsg(0);
+            listener->setComponentRecvMsg(0);
+            listener->setComponentSentMsg(0);
             listener->setDroppedMsg(0);
         }
     }

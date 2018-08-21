@@ -10,26 +10,23 @@ declare -a cases=(
                   "fast_mooving_"
                  )
 
-FINAL_RECVSENT=recvsent.result
-FINAL_SOLUTIONS=solutions.result
-FINAL_DROPPED=dropped.result
+declare -a metrics=(
+    "totalSolution"
+    "sentrecv"
+    "dropped"
+    "bskipped"
+    "reused"
+)
 
 for j in "${cases[@]}"
 do
     PREFIX=$j
     echo "______________ Processing Case: $PREFIX"
     
-    RESULT_FILE=$PREFIX.result
-    RESULT_FILE_2=$PREFIX.solutionssent.result
-    RESULT_FILE_3=$PREFIX.dropped.result
-
-    pasteArg="$pasteArg $RESULT_FILE"
-    pasteArg2="$pasteArg2 $RESULT_FILE_2"
-    pasteArg3="$pasteArg3 $RESULT_FILE_3"
-    
-    rm -rf $RESULT_FILE && touch $RESULT_FILE
-    rm -rf $RESULT_FILE_2 && touch $RESULT_FILE_2
-    rm -rf $RESULT_FILE_3 && touch $RESULT_FILE_3
+    for m in "${metrics[@]}"
+    do
+        >$PREFIX$m
+    done
 
     for i in {1..12}
     do
@@ -39,14 +36,23 @@ do
         RESULT=results/$PREFIX$i-#0.vec
         echo "________________ Analysing $RESULT"
 
-        scavetool -l -f "module(**.resultCollector)" $RESULT | grep sentrecv | head -1 | awk '{print $6}' | sed "s/mean=//" >> $RESULT_FILE
-        scavetool -l -f "module(**.resultCollector)" $RESULT | grep totalSolution | head -1 | awk '{print $6}' | sed "s/mean=//" >> $RESULT_FILE_2
-        scavetool -l -f "module(**.resultCollector)" $RESULT | grep dropped | head -1 | awk '{print $6}' | sed "s/mean=//" >> $RESULT_FILE_3
+        for m in "${metrics[@]}"
+        do
+            scavetool -l -f "module(**.resultCollector)" $RESULT | grep $m | head -1 | awk '{print $6}' | sed "s/mean=//" >> $PREFIX$m
+        done
 
     done
     
 done
 
-paste $pasteArg > $FINAL_RECVSENT
-paste $pasteArg2 > $FINAL_SOLUTIONS
-paste $pasteArg3 > $FINAL_DROPPED
+for m in "${metrics[@]}"
+do
+    pasteArg=""
+
+    for j in "${cases[@]}"
+    do
+        pasteArg="$pasteArg $j$m"
+    done
+
+    paste $pasteArg > $m.csv
+done

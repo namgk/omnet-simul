@@ -31,6 +31,7 @@ O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 # Object files for local .cc, .msg and .sm files
 OBJS = \
     $O/modules/app.o \
+    $O/modules/Assignment.o \
     $O/modules/centralizedCoordinator.o \
     $O/modules/component.o \
     $O/modules/ContextSync.o \
